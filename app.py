@@ -286,7 +286,7 @@ def train_and_save_models(df):
 # ----------------------
 
 def main():
-    st.set_page_config(page_title='India AQI Dashboard', layout='wide')
+    st.set_page_config(page_title='India AQI Dashboard', layout='wide', initial_sidebar_state='collapsed')
     st.title('🇮🇳 India Air Quality Index (AQI) Dashboard')
     st.markdown('---')
     
@@ -297,7 +297,6 @@ def main():
     if use_api:
         max_records = st.sidebar.slider('Max Records to Fetch', 100, 3100, 1000, 100, 
                                       help='With unlimited API key, you can fetch up to 3000+ records from all monitoring stations across India.')
-        st.sidebar.success('🔑 Using Production API Key - Unlimited Access!')
     else:
         max_records = 1000
         st.sidebar.info('Using local CSV file for real-time data')
@@ -432,7 +431,6 @@ def main():
         st.header('🌍 Real-Time AQI Insights')
         if use_api:
             st.success('📡 Live data from Government of India API')
-            st.success('🔑 **Production API Key Active** - Full access to all monitoring stations across India!')
         else:
             st.info('📄 Using local CSV file')
         

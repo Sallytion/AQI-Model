@@ -1,0 +1,173 @@
+State/UTs,City,2021 - Good Days (AQI - 0-200),2021 - Bad Days (Poor/ Very-Poor/ Severe) (AQI>200)
+Andhra Pradesh,Amaravati,350,8
+Andhra Pradesh,Rajamahendravaram,342,9
+Andhra Pradesh,Tirupati,337,2
+Andhra Pradesh,Vijayawada,NA,NA
+Andhra Pradesh,Visakhapatnam,321,21
+Arunachal Pradesh,Naharlagun,102,2
+Assam,Guwahati,273,91
+Bihar,Araria,3,11
+Bihar,Arrah,3,12
+Bihar,Bettiah,26,28
+Bihar,Bhagalpur,3,36
+Bihar,BiharSharif,13,28
+Bihar,Buxar,2,17
+Bihar,Chhapra,2,30
+Bihar,Darbhanga,22,44
+Bihar,Gaya,325,35
+Bihar,Hajipur,219,99
+Bihar,Katihar,3,33
+Bihar,Kishanganj,6,30
+Bihar,Manguraha,0,0
+Bihar,Motihari,22,37
+Bihar,Munger,5,31
+Bihar,Muzaffarpur,222,132
+Bihar,Patna,224,140
+Bihar,Purnia,2,31
+Bihar,Rajgir,5,16
+Bihar,Saharsa,2,27
+Bihar,Sasaram,10,35
+Bihar,Siwan,1,30
+Chandigarh,Chandigarh,348,13
+Chhattisgarh,Bhilai,28,0
+Chhattisgarh,Bilaspur,96,0
+Delhi,Delhi,197,168
+Gujarat,Ahmedabad,323,38
+Gujarat,Ankleshwar,189,102
+Gujarat,Gandhinagar,341,1
+Gujarat,Nandesari,201,17
+Gujarat,Vapi,282,44
+Gujarat,Vatva,263,86
+Haryana,Ambala,279,68
+Haryana,Bahadurgarh,198,146
+Haryana,Ballabgarh,214,124
+Haryana,Bhiwani,268,60
+Haryana,Charkh iDadri,235,93
+Haryana,Dharuhera,180,126
+Haryana,Faridabad,186,177
+Haryana,Fatehabad,250,86
+Haryana,Gurugram,215,150
+Haryana,Hisar,195,146
+Haryana,Jind,207,130
+Haryana,Kaithal,269,69
+Haryana,Karnal,266,69
+Haryana,Kurukshetra,244,102
+Haryana,Mandikhera,288,34
+Haryana,Manesar,163,144
+Haryana,Narnaul,205,104
+Haryana,Palwal,289,27
+Haryana,Panchkula,312,23
+Haryana,Panipat,224,84
+Haryana,Rohtak,223,118
+Haryana,Sirsa,292,53
+Haryana,Sonipat,212,113
+Haryana,Yamunanagar,218,122
+Jammu and Kashmir,Srinagar,292,7
+Jharkhand,Jorapokhar,88,2
+Karnataka,Bagalkot,317,0
+Karnataka,Bengaluru,365,0
+Karnataka,Bidar,175,2
+Karnataka,Chamarajanagar,302,0
+Karnataka,Chikkaballapur,335,0
+Karnataka,Chikkamagaluru,316,0
+Karnataka,Davanagere,226,0
+Karnataka,Gadag,194,1
+Karnataka,Hassan,237,0
+Karnataka,Hubballi,329,6
+Karnataka,Kalaburagi,231,9
+Karnataka,Kolar,209,0
+Karnataka,Koppal,317,0
+Karnataka,Mangalore,238,0
+Karnataka,Madikeri,336,0
+Karnataka,Mysuru,305,0
+Karnataka,Raichur,285,3
+Karnataka,Ramanagara,277,2
+Karnataka,Shivamogga,305,1
+Karnataka,Udupi,131,24
+Karnataka,Vijayapura,275,0
+Karnataka,Yadgir,333,1
+Kerala,Eloor,294,0
+Kerala,Ernakulam,293,0
+Kerala,Kannur,326,1
+Kerala,Kochi,256,2
+Kerala,Kollam,333,2
+Kerala,Kozhikode,334,2
+Kerala,Thiruvananthapuram,361,1
+Kerala,Thrissur,264,0
+MadhyaPradesh,Bhopal,316,44
+MadhyaPradesh,Damoh,274,23
+MadhyaPradesh,Dewas,318,19
+MadhyaPradesh,Gwalior,289,71
+MadhyaPradesh,Indore,311,45
+MadhyaPradesh,Jabalpur,302,53
+MadhyaPradesh,Katni,251,109
+MadhyaPradesh,Maihar,153,4
+MadhyaPradesh,Mandideep,312,19
+MadhyaPradesh,Pithampur,340,23
+MadhyaPradesh,Ratlam,306,9
+MadhyaPradesh,Sagar,322,9
+MadhyaPradesh,Satna,336,0
+MadhyaPradesh,Singrauli,194,153
+MadhyaPradesh,Ujjain,316,41
+Maharashtra,Aurangabad,236,2
+Maharashtra,Chandrapur,347,16
+Maharashtra,Kalyan,204,79
+Maharashtra,Mumbai,326,39
+Maharashtra,Nagpur,183,1
+Maharashtra,Nashik,312,6
+Maharashtra,NaviMumbai,286,71
+Maharashtra,Pune,359,6
+Maharashtra,Solapur,167,1
+Maharashtra,Thane,183,97
+Meghalaya,Shillong,172,0
+Mizoram,Aizawl,315,1
+Nagaland,Kohima,310,7
+Odisha,Brajrajnagar,228,10
+Odisha,Talcher,328,9
+Puducherry,Puducherry,335,0
+Punjab,Amritsar,311,32
+Punjab,Bathinda,254,24
+Punjab,Jalandhar,315,42
+Punjab,Khanna,332,25
+Punjab,Ludhiana,306,44
+Punjab,Mandi Gobindgarh,270,57
+Punjab,Patiala,317,39
+Punjab,Rupnagar,264,28
+Rajasthan,Ajmer,341,7
+Rajasthan,Alwar,357,5
+Rajasthan,Bhiwadi,142,213
+Rajasthan,Jaipur,330,34
+Rajasthan,Jodhpur,275,84
+Rajasthan,Kota,299,57
+Rajasthan,Pali,337,23
+Rajasthan,Udaipur,331,24
+TamilNadu,Chennai,365,0
+TamilNadu,Coimbatore,70,0
+TamilNadu,Gummidipoondi,193,5
+TamilNadu,Thoothukudi,324,0
+Telangana,Hyderabad,365,0
+Tripura,Agartala,284,44
+Uttar Pradesh,Agra,218,124
+Uttar Pradesh,Baghpat,169,170
+Uttar Pradesh,Bulandshahr,190,169
+Uttar Pradesh,Firozabad,102,57
+Uttar Pradesh,Ghaziabad,163,202
+Uttar Pradesh,Gorakhpur,145,28
+Uttar Pradesh,Greater Noida,184,180
+Uttar Pradesh,Hapur,243,84
+Uttar Pradesh,Kanpur,270,95
+Uttar Pradesh,Loni Dehat,NA,NA
+Uttar Pradesh,Lucknow,240,124
+Uttar Pradesh,Meerut,191,174
+Uttar Pradesh,Moradabad,160,141
+Uttar Pradesh,Muzaffarnagar,203,122
+Uttar Pradesh,Noida,204,159
+Uttar Pradesh,Prayagraj,160,49
+Uttar Pradesh,Varanasi,243,114
+Uttar Pradesh,Vrindavan,94,52
+West Bengal,Asansol,267,61
+West Bengal,Durgapur,177,116
+West Bengal,Haldia,300,22
+West Bengal,Howrah,266,98
+West Bengal,Kolkata,282,83
+West Bengal,Siliguri,258,75

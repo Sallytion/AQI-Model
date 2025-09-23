@@ -1,0 +1,30 @@
+Sl. No.,State,City Name,2022 - AQI< =200 - Good Days,2022 - AQI> 200 - Bad Days,2023 - AQI< =200 - Good Days,2023 - AQI> 200 - Bad Days,2024 - AQI< =200 - Good Days,2024 - AQI >200 - Bad Days
+1,Delhi,Delhi,17,75,13,79,21,71
+2,Haryana,Bahadurgarh,31,60,25,64,21,48
+3,Haryana,Ballabgarh,37,54,24,64,42,27
+4,Haryana,Bhiwani,52,38,39,52,38,40
+5,Haryana,Charkhi Dadri,50,38,48,39,46,44
+6,Haryana,Dharuhera,17,60,35,52,35,33
+7,Haryana,Faridabad,21,71,18,74,54,38
+8,Haryana,Gurugram,18,74,26,66,33,59
+9,Haryana,Jind,24,60,39,44,33,40
+10,Haryana,Karnal,54,33,53,33,57,21
+11,Haryana,Mandikhera,87,2,79,6,66,9
+12,Haryana,Manesar,32,56,33,56,46,27
+13,Haryana,Narnaul,72,16,50,32,48,14
+14,Haryana,Palwal,86,1,78,9,70,4
+15,Haryana,Panipat,61,15,56,21,56,19
+16,Haryana,Rohtak,49,35,30,62,46,44
+17,Haryana,Sonipat,46,35,16,55,21,42
+18,Rajasthan,Alwar,88,4,76,14,89,1
+19,Rajasthan,Bharatpur,0,0,28,56,80,12
+20,Rajasthan,Bhiwadi,34,54,15,67,44,48
+21,Uttar Pradesh,Baghpat,27,45,25,63,54,34
+22,Uttar Pradesh,Bulandshahr,33,59,41,48,51,41
+23,Uttar Pradesh,Ghaziabad,22,70,19,73,27,65
+24,Uttar Pradesh,Greater Noida,21,71,6,86,28,64
+25,Uttar Pradesh,Hapur,58,28,30,57,43,47
+26,Uttar Pradesh,Khurja,50,37,72,11,53,32
+27,Uttar Pradesh,Meerut,33,57,21,71,44,48
+28,Uttar Pradesh,Muzaffarnagar,29,58,15,57,43,48
+29,Uttar Pradesh,Noida,25,67,18,74,29,63

@@ -532,17 +532,111 @@ def main():
             
             # Show map if coordinates available
             if 'latitude' in df_view.columns and 'longitude' in df_view.columns:
-                st.subheader('🗺️ Station Locations')
-                map_data = df_view[['latitude', 'longitude']].dropna()
+                st.subheader('🗺️ Interactive Station Map')
+                
+                # Prepare map data with all available columns
+                base_cols = ['latitude', 'longitude', 'state', 'city', 'station', 'pollutant_id', 'last_update']
+                available_cols = [col for col in base_cols if col in df_view.columns]
+                map_data = df_view[available_cols].copy()
+                
+                # Add pollutant value columns if available
+                value_cols = ['avg_value', 'pollutant_avg', 'min_value', 'max_value', 'pollutant_min', 'pollutant_max']
+                for col in value_cols:
+                    if col in df_view.columns:
+                        map_data[col] = df_view[col]
+                
+                # Fill missing columns with defaults
+                for col in ['state', 'city', 'station', 'pollutant_id', 'last_update']:
+                    if col not in map_data.columns:
+                        map_data[col] = 'N/A'
+                
+                # Use the best available pollutant value column
+                pollutant_value_col = None
+                for col in ['avg_value', 'pollutant_avg']:
+                    if col in map_data.columns:
+                        pollutant_value_col = col
+                        break
+                
+                map_data = map_data.dropna(subset=['latitude', 'longitude'])
+                
                 if not map_data.empty:
                     # Convert to numeric
                     map_data['latitude'] = pd.to_numeric(map_data['latitude'], errors='coerce')
                     map_data['longitude'] = pd.to_numeric(map_data['longitude'], errors='coerce')
-                    map_data = map_data.dropna()
+                    
+                    if pollutant_value_col:
+                        map_data[pollutant_value_col] = pd.to_numeric(map_data[pollutant_value_col], errors='coerce')
+                    
+                    map_data = map_data.dropna(subset=['latitude', 'longitude'])
+                    
                     if not map_data.empty:
-                        st.map(map_data)
+                        # Create hover data dictionary
+                        hover_data = {
+                            'state': True,
+                            'city': True,
+                            'pollutant_id': True,
+                            'last_update': True,
+                            'latitude': ':.4f',
+                            'longitude': ':.4f'
+                        }
+                        
+                        # Check if we have valid pollutant values for sizing and coloring
+                        has_valid_values = False
+                        if pollutant_value_col and pollutant_value_col in map_data.columns:
+                            valid_values = map_data[pollutant_value_col].dropna()
+                            if len(valid_values) > 0 and not valid_values.isna().all():
+                                hover_data[pollutant_value_col] = ':.1f'
+                                has_valid_values = True
+                        
+                        # Create interactive map with hover data
+                        if has_valid_values:
+                            # Use pollutant values for color and size
+                            fig_map = px.scatter_mapbox(
+                                map_data,
+                                lat='latitude',
+                                lon='longitude',
+                                hover_name='station',
+                                hover_data=hover_data,
+                                color=pollutant_value_col,
+                                size=map_data[pollutant_value_col].fillna(10),  # Fill NaN with default size
+                                size_max=15,
+                                zoom=4,
+                                height=600,
+                                title=f'Air Quality Monitoring Stations ({len(map_data)} stations)',
+                                color_continuous_scale='Viridis'
+                            )
+                        else:
+                            # Use pollutant type for color only
+                            fig_map = px.scatter_mapbox(
+                                map_data,
+                                lat='latitude',
+                                lon='longitude',
+                                hover_name='station',
+                                hover_data=hover_data,
+                                color='pollutant_id',
+                                zoom=4,
+                                height=600,
+                                title=f'Air Quality Monitoring Stations ({len(map_data)} stations)'
+                            )
+                        
+                        # Update map style
+                        fig_map.update_layout(
+                            mapbox_style="open-street-map",
+                            margin={"r": 0, "t": 50, "l": 0, "b": 0},
+                            showlegend=True
+                        )
+                        
+                        st.plotly_chart(fig_map, use_container_width=True)
+                        
+                        # Add legend explanation
+                        if has_valid_values:
+                            st.info("💡 **Map Legend**: Marker size and color represent pollutant levels. Hover over stations for detailed information including pollutant values, location, and last update time.")
+                        else:
+                            st.info("💡 **Map Legend**: Marker colors represent different pollutants. Hover over stations for detailed information including location, pollutant type, and last update time.")
                     else:
                         st.info('No valid coordinates available for mapping')
+                else:
+                    st.info('No station data available for mapping')
         else:
             st.warning('⚠️ No real-time data available. Please check your connection or try refreshing.')
 

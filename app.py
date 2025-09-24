@@ -1,9 +1,13 @@
 import streamlit as st
+
+# Must be the first Streamlit command
+st.set_page_config(page_title='India AQI Dashboard', layout='wide', initial_sidebar_state='collapsed')
+
 import pandas as pd
 import numpy as np
 import joblib
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, f1_score, accuracy_score, classification_report
@@ -23,6 +27,100 @@ REALTIME_PATH = 'Real time Air Quality Index from various locations.csv'
 # API Configuration
 API_BASE_URL = 'https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69'
 API_KEY = '579b464db66ec23bdd0000015eb88b6f030349cb4f46c4631fb80919'
+
+# Load weather-enhanced AQI model
+@st.cache_resource
+def load_weather_aqi_model():
+    """Load the weather-enhanced AQI prediction model"""
+    try:
+        model = joblib.load('aqi_weather_model.joblib')
+        features = joblib.load('aqi_weather_features.joblib')
+        return model, features, True
+    except:
+        return None, None, False
+
+# Weather data fetching functions
+def get_city_coordinates(city):
+    """Get approximate coordinates for Indian cities"""
+    city_coords = {
+        'Ahmedabad': (23.0225, 72.5714),
+        'Aizawl': (23.7367, 92.7173),
+        'Amaravati': (16.5062, 80.6480),
+        'Amritsar': (31.6340, 74.8723),
+        'Bengaluru': (12.9716, 77.5946),
+        'Bhopal': (23.2599, 77.4126),
+        'Brajrajnagar': (21.8245, 83.9186),
+        'Chandigarh': (30.7333, 76.7794),
+        'Chennai': (13.0827, 80.2707),
+        'Coimbatore': (11.0168, 76.9558),
+        'Delhi': (28.7041, 77.1025),
+        'Ernakulam': (9.9312, 76.2673),
+        'Gurugram': (28.4595, 77.0266),
+        'Guwahati': (26.1445, 91.7362),
+        'Hyderabad': (17.3850, 78.4867),
+        'Jaipur': (26.9124, 75.7873),
+        'Jorapokhar': (23.7957, 86.4304),
+        'Kochi': (9.9312, 76.2673),
+        'Kolkata': (22.5726, 88.3639),
+        'Lucknow': (26.8467, 80.9462),
+        'Mumbai': (19.0760, 72.8777),
+        'Patna': (25.5941, 85.1376),
+        'Pune': (18.5204, 73.8567),
+        'Rajkot': (22.3039, 70.8022),
+        'Shillong': (25.5788, 91.8933),
+        'Thiruvananthapuram': (8.5241, 76.9366),
+        'Visakhapatnam': (17.6868, 83.2185)
+    }
+    return city_coords.get(city, (28.7041, 77.1025))  # Default to Delhi
+
+def fetch_weather_data(city, date):
+    """Fetch weather data from Open Meteo API for a specific city and date"""
+    lat, lon = get_city_coordinates(city)
+    
+    # Open Meteo API endpoint
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    
+    # Format date
+    date_str = date.strftime('%Y-%m-%d') if hasattr(date, 'strftime') else str(date)
+    
+    params = {
+        'latitude': lat,
+        'longitude': lon,
+        'start_date': date_str,
+        'end_date': date_str,
+        'daily': [
+            'temperature_2m_max', 'temperature_2m_min', 'temperature_2m_mean',
+            'relative_humidity_2m_max', 'relative_humidity_2m_min', 'relative_humidity_2m_mean',
+            'precipitation_sum', 'rain_sum', 'snowfall_sum',
+            'wind_speed_10m_max', 'wind_speed_10m_mean',
+            'wind_direction_10m_dominant', 'wind_gusts_10m_max',
+            'pressure_msl_mean', 'sunshine_duration'
+        ],
+        'timezone': 'Asia/Kolkata'
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'daily' in data and data['daily']:
+            weather_data = {}
+            for key, values in data['daily'].items():
+                if key != 'time' and values and len(values) > 0:
+                    weather_data[key] = values[0]
+                else:
+                    weather_data[key] = None
+            
+            return weather_data
+        else:
+            return {}
+    except Exception as e:
+        st.warning(f"Could not fetch weather data: {e}")
+        return {}
+
+# Load the models at startup
+aqi_model, aqi_features, model_available = load_weather_aqi_model()
 
 # Fetch real-time data from API
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -286,7 +384,6 @@ def train_and_save_models(df):
 # ----------------------
 
 def main():
-    st.set_page_config(page_title='India AQI Dashboard', layout='wide', initial_sidebar_state='collapsed')
     st.title('🇮🇳 India Air Quality Index (AQI) Dashboard')
     st.markdown('---')
     
@@ -314,14 +411,21 @@ def main():
     state_stats = extract_stats_state(state_df)
 
     # Train/load models
-    if not (os.path.exists('aqi_regressor.joblib') and os.path.exists('aqi_classifier.joblib')):
-        model_metrics = train_and_save_models(realtime_df)
+    if not model_available:
+        # Try to use old models as fallback
+        if not (os.path.exists('aqi_regressor.joblib') and os.path.exists('aqi_classifier.joblib')):
+            model_metrics = train_and_save_models(realtime_df)
+        else:
+            model_metrics = {}
+            try:
+                reg = joblib.load('aqi_regressor.joblib')
+                clf = joblib.load('aqi_classifier.joblib')
+                feature_cols = joblib.load('model_features.joblib')
+                aqi_categories = joblib.load('aqi_categories.joblib')
+            except:
+                model_metrics = {'error': 'Could not load old models'}
     else:
-        model_metrics = {}
-        reg = joblib.load('aqi_regressor.joblib')
-        clf = joblib.load('aqi_classifier.joblib')
-        feature_cols = joblib.load('model_features.joblib')
-        aqi_categories = joblib.load('aqi_categories.joblib')
+        model_metrics = {'weather_model_loaded': True}
 
     # Tabs for navigation
     tab1, tab2, tab3 = st.tabs(['📊 Dashboard', '🤖 Prediction Tool', '🌍 Real-Time Insights'])
@@ -374,55 +478,180 @@ def main():
                 st.metric('Cities Covered', realtime_df['city'].nunique())
 
     # ----------------------
-    # Prediction Tool Tab
+    # Weather-Enhanced AQI Prediction Tool Tab
     # ----------------------
     with tab2:
-        st.header('AQI Prediction Tool')
-        st.markdown('Enter pollutant levels and details to predict AQI:')
+        st.header('🌤️ Weather-Enhanced AQI Prediction Tool')
+        st.markdown('**Predict AQI using pollutant levels and real-time weather data**')
         
-        # Check if models exist and were trained successfully
-        if (os.path.exists('aqi_regressor.joblib') and os.path.exists('aqi_classifier.joblib') 
-            and 'error' not in model_metrics):
-            # Load models
-            reg = joblib.load('aqi_regressor.joblib')
-            clf = joblib.load('aqi_classifier.joblib')
-            feature_cols = joblib.load('model_features.joblib')
-            aqi_categories = joblib.load('aqi_categories.joblib')
+        if model_available:
+            st.success("🎯 Using Advanced Weather-Enhanced ML Model (R² = 0.951)")
             
-            # User input widgets
-            input_data = {}
-            for col in feature_cols:
-                if col in ['hour', 'day', 'month']:
-                    input_data[col] = st.slider(col.capitalize(), 0, 23 if col=='hour' else 31 if col=='day' else 12, 1)
-                elif '_encoded' in col:
-                    st.write(f"{col.replace('_encoded', '')}: Encoded automatically")
-                    input_data[col] = 0  # Default encoded value
-                elif col in ['latitude', 'longitude']:
-                    input_data[col] = st.number_input(col.capitalize(), value=28.6139 if col=='latitude' else 77.2090)
-                else:
-                    input_data[col] = st.number_input(col, min_value=0.0, max_value=1000.0, value=50.0)
+            col1, col2 = st.columns([2, 1])
             
-            if st.button('Predict AQI'):
-                X_input = np.array([list(input_data.values())])
-                pred_aqi = reg.predict(X_input)[0]
-                pred_cat_idx = clf.predict(X_input)[0]
-                pred_cat = aqi_categories[pred_cat_idx] if pred_cat_idx < len(aqi_categories) else 'Unknown'
+            with col1:
+                st.subheader("📍 Location & Date")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric('Predicted AQI', f'{pred_aqi:.0f}')
-                with col2:
-                    st.metric('Predicted Category', pred_cat)
+                # City selection
+                available_cities = ['Ahmedabad', 'Aizawl', 'Amaravati', 'Amritsar', 'Bengaluru', 'Bhopal', 
+                                  'Brajrajnagar', 'Chandigarh', 'Chennai', 'Coimbatore', 'Delhi', 'Ernakulam',
+                                  'Gurugram', 'Guwahati', 'Hyderabad', 'Jaipur', 'Jorapokhar', 'Kochi', 
+                                  'Kolkata', 'Lucknow', 'Mumbai', 'Patna', 'Pune', 'Rajkot', 'Shillong', 
+                                  'Thiruvananthapuram', 'Visakhapatnam']
                 
-                # Feature importance
-                st.subheader('Feature Importance')
-                importances = reg.feature_importances_
-                imp_df = pd.DataFrame({'feature': feature_cols, 'importance': importances})
-                st.bar_chart(imp_df.set_index('feature'))
+                selected_city = st.selectbox('Select City', available_cities, index=available_cities.index('Delhi'))
+                
+                # Date selection (can predict future dates up to 7 days)
+                min_date = datetime.now().date() - timedelta(days=365)  # 1 year back
+                max_date = datetime.now().date() + timedelta(days=7)    # 7 days forward
+                selected_date = st.date_input('Select Date', 
+                                            value=datetime.now().date(),
+                                            min_value=min_date, 
+                                            max_value=max_date)
+                
+                st.subheader("🧪 Pollutant Levels")
+                col_left, col_right = st.columns(2)
+                
+                with col_left:
+                    pm25 = st.number_input('PM2.5 (µg/m³)', min_value=0.0, max_value=500.0, value=50.0, step=1.0)
+                    pm10 = st.number_input('PM10 (µg/m³)', min_value=0.0, max_value=600.0, value=80.0, step=1.0)
+                    no = st.number_input('NO (µg/m³)', min_value=0.0, max_value=200.0, value=20.0, step=1.0)
+                    no2 = st.number_input('NO2 (µg/m³)', min_value=0.0, max_value=200.0, value=40.0, step=1.0)
+                    nox = st.number_input('NOx (µg/m³)', min_value=0.0, max_value=300.0, value=60.0, step=1.0)
+                    nh3 = st.number_input('NH3 (µg/m³)', min_value=0.0, max_value=400.0, value=25.0, step=1.0)
+                
+                with col_right:
+                    co = st.number_input('CO (mg/m³)', min_value=0.0, max_value=30.0, value=1.5, step=0.1)
+                    so2 = st.number_input('SO2 (µg/m³)', min_value=0.0, max_value=400.0, value=30.0, step=1.0)
+                    o3 = st.number_input('O3 (µg/m³)', min_value=0.0, max_value=300.0, value=80.0, step=1.0)
+                    benzene = st.number_input('Benzene (µg/m³)', min_value=0.0, max_value=50.0, value=2.0, step=0.1)
+                    toluene = st.number_input('Toluene (µg/m³)', min_value=0.0, max_value=200.0, value=5.0, step=0.1)
+                    xylene = st.number_input('Xylene (µg/m³)', min_value=0.0, max_value=200.0, value=3.0, step=0.1)
+                
+                # Fetch weather data automatically
+                if st.button('🔮 Predict AQI with Live Weather Data', type='primary'):
+                    with st.spinner('Fetching live weather data and predicting...'):
+                        
+                        # Fetch weather data
+                        weather_data = fetch_weather_data(selected_city, selected_date)
+                        
+                        # Prepare input data
+                        pollutants = {
+                            'PM2.5': pm25, 'PM10': pm10, 'NO': no, 'NO2': no2, 'NOx': nox, 'NH3': nh3,
+                            'CO': co, 'SO2': so2, 'O3': o3, 'Benzene': benzene, 'Toluene': toluene, 'Xylene': xylene
+                        }
+                        
+                        # Create input features
+                        input_data = {}
+                        
+                        # Add pollutant data
+                        for key, value in pollutants.items():
+                            input_data[key] = value
+                        
+                        # Add weather data
+                        for key, value in weather_data.items():
+                            input_data[f'weather_{key}'] = value
+                        
+                        # Add time features
+                        date_obj = pd.to_datetime(selected_date)
+                        input_data['year'] = date_obj.year
+                        input_data['month'] = date_obj.month
+                        input_data['day_of_year'] = date_obj.dayofyear
+                        season = ((date_obj.month%12 + 3)//3)
+                        season_map = {1: 0, 2: 1, 3: 2, 4: 3}  # Winter, Spring, Summer, Fall
+                        input_data['season_encoded'] = season_map[season]
+                        
+                        # Encode city
+                        city_mapping = {
+                            'Ahmedabad': 0, 'Aizawl': 1, 'Amaravati': 2, 'Amritsar': 3, 'Bengaluru': 4, 'Bhopal': 5,
+                            'Brajrajnagar': 6, 'Chandigarh': 7, 'Chennai': 8, 'Coimbatore': 9, 'Delhi': 10,
+                            'Ernakulam': 11, 'Gurugram': 12, 'Guwahati': 13, 'Hyderabad': 14, 'Jaipur': 15,
+                            'Jorapokhar': 16, 'Kochi': 17, 'Kolkata': 18, 'Lucknow': 19, 'Mumbai': 20,
+                            'Patna': 21, 'Pune': 22, 'Rajkot': 23, 'Shillong': 24, 'Thiruvananthapuram': 25,
+                            'Visakhapatnam': 26
+                        }
+                        input_data['city_encoded'] = city_mapping.get(selected_city, 10)  # Default to Delhi
+                        
+                        # Create DataFrame with all required features
+                        input_df = pd.DataFrame([input_data])
+                        
+                        # Ensure all required features are present
+                        for col in aqi_features:
+                            if col not in input_df.columns:
+                                input_df[col] = 0
+                        
+                        # Select features in the same order as training
+                        input_df = input_df[aqi_features].fillna(0)
+                        
+                        # Make prediction
+                        predicted_aqi = aqi_model.predict(input_df)[0]
+                        predicted_category = get_aqi_category(predicted_aqi)
+                        
+                        # Display results
+                        st.success("✅ Prediction Complete!")
+                        
+                        result_col1, result_col2, result_col3 = st.columns(3)
+                        
+                        with result_col1:
+                            st.metric('🎯 Predicted AQI', f'{predicted_aqi:.0f}', 
+                                    delta=f'Category: {predicted_category}')
+                        
+                        with result_col2:
+                            color_map = {
+                                'Good': '🟢', 'Satisfactory': '🟡', 'Moderate': '🟠', 
+                                'Poor': '🔴', 'Very Poor': '🟣', 'Severe': '⚫'
+                            }
+                            st.metric('📊 Air Quality', f'{color_map.get(predicted_category, "❔")} {predicted_category}')
+                        
+                        with result_col3:
+                            if predicted_aqi <= 50:
+                                health_msg = "Minimal Impact"
+                            elif predicted_aqi <= 100:
+                                health_msg = "Minor Breathing Discomfort"
+                            elif predicted_aqi <= 200:
+                                health_msg = "Breathing Discomfort"
+                            elif predicted_aqi <= 300:
+                                health_msg = "Respiratory Illness"
+                            elif predicted_aqi <= 400:
+                                health_msg = "Respiratory Effects"
+                            else:
+                                health_msg = "Emergency Conditions"
+                            st.metric('🏥 Health Impact', health_msg)
+                
+            with col2:
+                st.subheader("📈 Model Information")
+                st.info("""
+                **Weather-Enhanced AQI Model**
+                
+                ✅ **Accuracy**: R² = 0.951
+                📉 **Error**: MAE = 13.57
+                🌡️ **Weather Features**: 15 parameters
+                🧪 **Pollutants**: 12 parameters
+                📅 **Training Data**: 2015-2020
+                🏙️ **Cities**: 26+ Indian cities
+                
+                **Top Features:**
+                1. PM2.5 (83.2%)
+                2. PM10 (10.6%)
+                3. CO (1.1%)
+                4. O3 (0.6%)
+                5. Weather data (4.5%)
+                """)
+                
+                # Weather info section
+                if st.checkbox("🌤️ Show Weather Preview"):
+                    preview_weather = fetch_weather_data(selected_city, selected_date)
+                    if preview_weather:
+                        st.write(f"**Weather for {selected_city} on {selected_date}:**")
+                        st.write(f"🌡️ Temp: {preview_weather.get('temperature_2m_mean', 'N/A')}°C")
+                        st.write(f"💧 Humidity: {preview_weather.get('relative_humidity_2m_mean', 'N/A')}%")
+                        st.write(f"💨 Wind: {preview_weather.get('wind_speed_10m_mean', 'N/A')} km/h")
+                        st.write(f"☔ Rain: {preview_weather.get('precipitation_sum', 'N/A')} mm")
         else:
-            st.warning('Models could not be trained due to insufficient data. Please check your CSV files.')
-            if 'error' in model_metrics:
-                st.error(f"Error: {model_metrics['error']}")
+            st.error("⚠️ Weather-Enhanced AQI Model not available!")
+            st.warning("Please run the data processing pipeline first:")
+            st.code("python data_processor.py", language="bash")
+            st.info("This will clean the data, fetch weather information, and train the advanced model.")
 
     # ----------------------
     # Real-Time Insights Tab

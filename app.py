@@ -14,6 +14,212 @@ from sklearn.metrics import r2_score, mean_absolute_error, f1_score, accuracy_sc
 import plotly.express as px
 import requests
 import json
+import logging
+import time
+import traceback
+
+# Configure logging for Smart Prediction tab
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('aqi_smart_prediction.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Custom JSON encoder to handle NumPy data types
+def json_serialize(obj):
+    """Custom JSON serializer that handles NumPy data types"""
+    if hasattr(obj, 'item'):  # NumPy scalars
+        return obj.item()
+    elif hasattr(obj, 'tolist'):  # NumPy arrays
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {k: json_serialize(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [json_serialize(item) for item in obj]
+    else:
+        return obj
+
+# Smart Prediction Activity Logger
+class SmartPredictionLogger:
+    def __init__(self):
+        self.session_id = None
+        self.start_time = None
+        self.activities = []
+    
+    def start_session(self):
+        """Start a new logging session"""
+        self.session_id = f"SP_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{int(time.time() * 1000) % 10000}"
+        self.start_time = datetime.now()
+        self.activities = []
+        
+        session_info = {
+            'session_id': self.session_id,
+            'start_time': self.start_time.isoformat(),
+            'event_type': 'SESSION_START',
+            'tab': 'Smart Prediction',
+            'user_agent': st.session_state.get('user_agent', 'unknown')
+        }
+        
+        logger.info(f"🚀 SMART_PREDICTION_SESSION_START: {json.dumps(json_serialize(session_info), ensure_ascii=False)}")
+        return self.session_id
+    
+    def log_user_action(self, action_type, details):
+        """Log user interactions"""
+        if not self.session_id:
+            self.start_session()
+        
+        activity = {
+            'session_id': self.session_id,
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'USER_ACTION',
+            'action_type': action_type,
+            'details': details
+        }
+        
+        self.activities.append(activity)
+        logger.info(f"👤 USER_ACTION: {json.dumps(json_serialize(activity), ensure_ascii=False)}")
+    
+    def log_api_call(self, api_name, endpoint, params, response_status, response_size=None, duration=None, error=None):
+        """Log API calls"""
+        if not self.session_id:
+            self.start_session()
+        
+        api_log = {
+            'session_id': self.session_id,
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'API_CALL',
+            'api_name': api_name,
+            'endpoint': endpoint,
+            'params': params,
+            'response_status': response_status,
+            'response_size': response_size,
+            'duration_ms': duration,
+            'error': error
+        }
+        
+        self.activities.append(api_log)
+        if error:
+            logger.error(f"🌐 API_ERROR: {json.dumps(json_serialize(api_log), ensure_ascii=False)}")
+        else:
+            logger.info(f"🌐 API_CALL: {json.dumps(json_serialize(api_log), ensure_ascii=False)}")
+    
+    def log_model_run(self, model_type, input_features, prediction_result, processing_time, model_metrics=None, error=None):
+        """Log model predictions"""
+        if not self.session_id:
+            self.start_session()
+        
+        model_log = {
+            'session_id': self.session_id,
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'MODEL_RUN',
+            'model_type': model_type,
+            'input_features_count': len(input_features) if input_features else 0,
+            'input_summary': {
+                'pm25': input_features.get('PM2.5', 0) if input_features else 0,
+                'pm10': input_features.get('PM10', 0) if input_features else 0,
+                'temperature': input_features.get('weather_temperature_2m_mean', 0) if input_features else 0,
+                'humidity': input_features.get('weather_relative_humidity_2m_mean', 0) if input_features else 0
+            },
+            'prediction_result': prediction_result,
+            'processing_time_ms': processing_time,
+            'model_metrics': model_metrics,
+            'error': error
+        }
+        
+        self.activities.append(model_log)
+        if error:
+            logger.error(f"🤖 MODEL_ERROR: {json.dumps(json_serialize(model_log), ensure_ascii=False)}")
+        else:
+            logger.info(f"🤖 MODEL_RUN: {json.dumps(json_serialize(model_log), ensure_ascii=False)}")
+    
+    def log_calculation(self, calc_type, input_data, result, duration=None, error=None):
+        """Log data processing and calculations"""
+        if not self.session_id:
+            self.start_session()
+        
+        calc_log = {
+            'session_id': self.session_id,
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'CALCULATION',
+            'calculation_type': calc_type,
+            'input_summary': input_data,
+            'result': result,
+            'duration_ms': duration,
+            'error': error
+        }
+        
+        self.activities.append(calc_log)
+        if error:
+            logger.error(f"🧮 CALCULATION_ERROR: {json.dumps(json_serialize(calc_log), ensure_ascii=False)}")
+        else:
+            logger.info(f"🧮 CALCULATION: {json.dumps(json_serialize(calc_log), ensure_ascii=False)}")
+    
+    def log_error(self, error_type, error_message, context=None, traceback_info=None):
+        """Log errors and exceptions"""
+        if not self.session_id:
+            self.start_session()
+        
+        error_log = {
+            'session_id': self.session_id,
+            'timestamp': datetime.now().isoformat(),
+            'event_type': 'ERROR',
+            'error_type': error_type,
+            'error_message': str(error_message),
+            'context': context,
+            'traceback': traceback_info
+        }
+        
+        self.activities.append(error_log)
+        logger.error(f"❌ ERROR: {json.dumps(json_serialize(error_log), ensure_ascii=False)}")
+    
+    def end_session(self, final_result=None):
+        """End logging session with summary"""
+        if not self.session_id:
+            return
+        
+        duration = (datetime.now() - self.start_time).total_seconds() if self.start_time else 0
+        
+        session_summary = {
+            'session_id': self.session_id,
+            'end_time': datetime.now().isoformat(),
+            'event_type': 'SESSION_END',
+            'total_duration_seconds': duration,
+            'total_activities': len(self.activities),
+            'activity_breakdown': {
+                'user_actions': len([a for a in self.activities if a.get('event_type') == 'USER_ACTION']),
+                'api_calls': len([a for a in self.activities if a.get('event_type') == 'API_CALL']),
+                'model_runs': len([a for a in self.activities if a.get('event_type') == 'MODEL_RUN']),
+                'calculations': len([a for a in self.activities if a.get('event_type') == 'CALCULATION']),
+                'errors': len([a for a in self.activities if a.get('event_type') == 'ERROR'])
+            },
+            'final_result': final_result
+        }
+        
+        logger.info(f"🏁 SMART_PREDICTION_SESSION_END: {json.dumps(json_serialize(session_summary), ensure_ascii=False)}")
+        
+        # Save detailed session log to file
+        try:
+            os.makedirs('session_logs', exist_ok=True)
+            with open(f'session_logs/smart_prediction_{self.session_id}.json', 'w', encoding='utf-8') as f:
+                json.dump({
+                    'session_summary': session_summary,
+                    'activities': self.activities
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save detailed session log: {e}")
+
+# Global Smart Prediction Logger
+sp_logger = SmartPredictionLogger()
 
 # ----------------------
 # 1. DATA PREPARATION
@@ -29,24 +235,46 @@ API_BASE_URL = 'https://api.data.gov.in/resource/3b01bcb8-0b14-4abf-b6f2-c1bfd38
 API_KEY = '579b464db66ec23bdd0000015eb88b6f030349cb4f46c4631fb80919'
 
 # Load weather-enhanced AQI model
-@st.cache_resource
+# Load weather-enhanced AQI model
+# @st.cache_resource(hash_funcs={type(lambda: None): lambda _: None})
 def load_weather_aqi_model():
-    """Load the weather-enhanced AQI prediction model"""
+    """Load the multi-output pollutant prediction model"""
     try:
-        model = joblib.load('aqi_weather_model.joblib')
-        features = joblib.load('aqi_weather_features.joblib')
-        return model, features, True
-    except:
-        return None, None, False
+        if os.path.exists('aqi_weather_model.joblib') and os.path.exists('aqi_weather_features.joblib'):
+            model = joblib.load('aqi_weather_model.joblib')
+            features = joblib.load('aqi_weather_features.joblib')
+            
+            # Load target pollutants and metrics if available
+            targets = None
+            metrics = None
+            if os.path.exists('aqi_weather_targets.joblib'):
+                targets = joblib.load('aqi_weather_targets.joblib')
+            if os.path.exists('aqi_weather_metrics.joblib'):
+                metrics = joblib.load('aqi_weather_metrics.joblib')
+                
+            print(f"✅ Multi-output pollutant prediction model loaded successfully!")
+            print(f"Model predicts: {targets if targets else 'PM2.5, PM10, NO2, SO2, CO, O3'}")
+            print(f"Using {len(features)} features for prediction")
+            
+            return model, features, True, targets, metrics
+        else:
+            print("❌ Multi-output model files not found")
+            return None, None, False, None, None
+    except Exception as e:
+        print(f"❌ Error loading multi-output model: {e}")
+        return None, None, False, None, None
 
 # Weather data fetching functions
 def get_city_coordinates(city):
     """Get approximate coordinates for Indian cities"""
     city_coords = {
         'Ahmedabad': (23.0225, 72.5714),
+        'Agra': (27.1767, 78.0081),
         'Aizawl': (23.7367, 92.7173),
+        'Allahabad': (25.4358, 81.8463),
         'Amaravati': (16.5062, 80.6480),
         'Amritsar': (31.6340, 74.8723),
+        'Aurangabad': (19.8762, 75.3433),
         'Bengaluru': (12.9716, 77.5946),
         'Bhopal': (23.2599, 77.4126),
         'Brajrajnagar': (21.8245, 83.9186),
@@ -54,21 +282,45 @@ def get_city_coordinates(city):
         'Chennai': (13.0827, 80.2707),
         'Coimbatore': (11.0168, 76.9558),
         'Delhi': (28.7041, 77.1025),
+        'Dhanbad': (23.7957, 86.4304),
         'Ernakulam': (9.9312, 76.2673),
+        'Faridabad': (28.4089, 77.3178),
+        'Ghaziabad': (28.6692, 77.4538),
         'Gurugram': (28.4595, 77.0266),
         'Guwahati': (26.1445, 91.7362),
+        'Gwalior': (26.2183, 78.1828),
+        'Howrah': (22.5958, 88.2636),
         'Hyderabad': (17.3850, 78.4867),
+        'Indore': (22.7196, 75.8577),
+        'Jabalpur': (23.1815, 79.9864),
         'Jaipur': (26.9124, 75.7873),
+        'Jodhpur': (26.2389, 73.0243),
         'Jorapokhar': (23.7957, 86.4304),
+        'Kalyan-Dombivali': (19.2403, 73.1305),
+        'Kanpur': (26.4499, 80.3319),
         'Kochi': (9.9312, 76.2673),
         'Kolkata': (22.5726, 88.3639),
+        'Kota': (25.2138, 75.8648),
         'Lucknow': (26.8467, 80.9462),
+        'Ludhiana': (30.9010, 75.8573),
+        'Madurai': (9.9252, 78.1198),
+        'Meerut': (28.9845, 77.7064),
         'Mumbai': (19.0760, 72.8777),
+        'Nagpur': (21.1458, 79.0882),
+        'Nashik': (19.9975, 73.7898),
+        'Navi Mumbai': (19.0330, 73.0297),
         'Patna': (25.5941, 85.1376),
         'Pune': (18.5204, 73.8567),
+        'Raipur': (21.2514, 81.6296),
         'Rajkot': (22.3039, 70.8022),
+        'Ranchi': (23.3441, 85.3096),
         'Shillong': (25.5788, 91.8933),
+        'Srinagar': (34.0837, 74.7973),
         'Thiruvananthapuram': (8.5241, 76.9366),
+        'Vadodara': (22.3072, 73.1812),
+        'Varanasi': (25.3176, 82.9739),
+        'Vasai-Virar': (19.4912, 72.8054),
+        'Vijayawada': (16.5062, 80.6480),
         'Visakhapatnam': (17.6868, 83.2185)
     }
     return city_coords.get(city, (28.7041, 77.1025))  # Default to Delhi
@@ -120,7 +372,7 @@ def fetch_weather_data(city, date):
         return {}
 
 # Load the models at startup
-aqi_model, aqi_features, model_available = load_weather_aqi_model()
+aqi_model, aqi_features, model_available, aqi_targets, aqi_metrics = load_weather_aqi_model()
 
 # Helper functions for real-time prediction
 def process_realtime_pollutant_data(df, use_average=True, city=None):
@@ -131,7 +383,7 @@ def process_realtime_pollutant_data(df, use_average=True, city=None):
     # Enhanced pollutant mapping (same as debug menu)
     pollutant_mapping = {
         'PM2.5': 'PM2.5', 'PM10': 'PM10', 'NO': 'NO', 'NO2': 'NO2', 
-        'NOX': 'NOx', 'NH3': 'NH3', 'CO': 'CO', 'SO2': 'SO2', 'O3': 'O3',
+        'NOX': 'NOx', 'NH3': 'NH3', 'CO': 'CO', 'SO2': 'SO2', 'O3': 'O3', 'OZONE': 'O3',
         'BENZENE': 'Benzene', 'TOLUENE': 'Toluene', 'XYLENE': 'Xylene',
         'C6H6': 'Benzene', 'C7H8': 'Toluene', 'C8H10': 'Xylene'
     }
@@ -139,10 +391,11 @@ def process_realtime_pollutant_data(df, use_average=True, city=None):
     pollutants = {}
     
     # Process the API response - each row is a different pollutant
-    if 'pollutant_avg' in df.columns and 'pollutant_id' in df.columns:
+    if ('avg_value' in df.columns or 'pollutant_avg' in df.columns) and 'pollutant_id' in df.columns:
         for _, record in df.iterrows():
             pollutant_id = str(record.get('pollutant_id', '')).strip()
-            avg_value = record.get('pollutant_avg', record.get('avg_value', 0))
+            # Try both column names for the average value
+            avg_value = record.get('avg_value', record.get('pollutant_avg', 0))
             
             # Convert to float
             try:
@@ -152,7 +405,7 @@ def process_realtime_pollutant_data(df, use_average=True, city=None):
             
             # Map API pollutant names to our format
             mapped_pollutant = pollutant_mapping.get(pollutant_id.upper(), pollutant_id)
-            if mapped_pollutant and avg_value > 0:
+            if mapped_pollutant and avg_value >= 0:  # Changed from > 0 to >= 0 to include valid zero values
                 if mapped_pollutant in pollutants:
                     # If we already have this pollutant, average the values
                     if use_average:
@@ -180,21 +433,40 @@ def process_realtime_pollutant_data(df, use_average=True, city=None):
     # Get city-specific defaults or use Delhi as fallback
     defaults = city_defaults.get(city, city_defaults['Delhi']) if city else city_defaults['Delhi']
     
-    # Create complete pollutant data with defaults for missing values
-    pollutant_data = {
-        'PM2.5': pollutants.get('PM2.5', defaults['PM2.5']),
-        'PM10': pollutants.get('PM10', defaults['PM10']),
-        'NO': pollutants.get('NO', 15),
-        'NO2': pollutants.get('NO2', defaults['NO2']),
-        'NOx': pollutants.get('NOx', defaults['NO2'] + 15),
-        'NH3': pollutants.get('NH3', 10),
-        'CO': pollutants.get('CO', 1.8),
-        'SO2': pollutants.get('SO2', defaults['SO2']),
-        'O3': pollutants.get('O3', 70),
-        'Benzene': pollutants.get('Benzene', 3.5),
-        'Toluene': pollutants.get('Toluene', 8),
-        'Xylene': pollutants.get('Xylene', 6)
+    # Universal default values from smart prediction interface
+    universal_defaults = {
+        'PM2.5': 50.0,
+        'PM10': 80.0,
+        'NO': 20.0,
+        'NO2': 40.0,
+        'NOx': 60.0,
+        'NH3': 25.0,
+        'CO': 1.5,
+        'SO2': 30.0,
+        'O3': 80.0,
+        'Benzene': 2.0,
+        'Toluene': 5.0,
+        'Xylene': 3.0
     }
+    
+    # Create complete pollutant data, preferring real API data over defaults
+    pollutant_data = {}
+    for pollutant, default_value in universal_defaults.items():
+        fetched_value = pollutants.get(pollutant, None)
+        # Use fetched value if available and valid, otherwise use default
+        if fetched_value is not None and fetched_value >= 0:
+            pollutant_data[pollutant] = fetched_value
+            print(f"🔍 DEBUG: Using real API data for {pollutant}: {fetched_value} (city: {city})")
+        else:
+            pollutant_data[pollutant] = default_value
+            print(f"🔍 DEBUG: Using default for {pollutant}: {default_value} (city: {city})")
+    
+    # Validate PM10 >= PM2.5 (physical constraint)
+    if pollutant_data['PM10'] < pollutant_data['PM2.5']:
+        print(f"🔧 DEBUG: Correcting PM10 ({pollutant_data['PM10']}) < PM2.5 ({pollutant_data['PM2.5']}) for {city}")
+        # Set PM10 to be at least equal to PM2.5 plus a small buffer
+        pollutant_data['PM10'] = pollutant_data['PM2.5'] * 1.2  # PM10 is typically 20% higher than PM2.5
+        print(f"🔧 DEBUG: Corrected PM10 to {pollutant_data['PM10']} for {city}")
     
     return pollutant_data
 
@@ -284,11 +556,27 @@ def sanity_check_aqi_prediction(pollutant_data, predicted_aqi):
 
 def make_realtime_prediction(pollutant_data, weather_data, city, date):
     """Make AQI prediction using real-time pollutant and weather data with enhanced debugging"""
+    start_time = time.time()
+    
     try:
         # Load the model and features
-        model, features, available = load_weather_aqi_model()
+        model, features, available, targets, metrics = load_weather_aqi_model()
         if not available:
+            sp_logger.log_error(
+                error_type="MODEL_NOT_AVAILABLE",
+                error_message="Weather AQI model is not available",
+                context={'city': city, 'date': str(date)}
+            )
             return None
+        
+        # Log model run initiation
+        sp_logger.log_model_run(
+            model_type="Weather-Enhanced Random Forest",
+            input_features={'pollutants': pollutant_data, 'weather': weather_data, 'city': city, 'date': str(date)},
+            prediction_result=None,
+            processing_time=0,
+            error=None
+        )
         
         # Create input features
         input_data = {}
@@ -297,19 +585,48 @@ def make_realtime_prediction(pollutant_data, weather_data, city, date):
         for key, value in pollutant_data.items():
             input_data[key] = value
         
-        # Add weather data with correct feature names
-        weather_feature_mapping = {
-            'T': 'weather_temperature_2m_mean',
-            'RH': 'weather_relative_humidity_2m_mean', 
-            'WS': 'weather_wind_speed_10m_mean',
-            'WD': 'weather_wind_direction_10m_dominant',
-            'RF': 'weather_precipitation_sum',
-            'BP': 'weather_pressure_msl_mean'
-        }
+        # Add weather data with all required features
+        # The model expects specific weather features, we need to provide them all
+        # If we only have simplified weather data, we'll estimate the missing ones
         
-        for key, value in weather_data.items():
-            mapped_key = weather_feature_mapping.get(key, f'weather_{key}')
-            input_data[mapped_key] = value
+        # Extract basic weather values
+        temp_mean = weather_data.get('T', 25.0)
+        humidity_mean = weather_data.get('RH', 65.0)
+        wind_speed_mean = weather_data.get('WS', 5.0)
+        wind_direction = weather_data.get('WD', 180.0)
+        precipitation = weather_data.get('RF', 0.0)
+        pressure = weather_data.get('BP', 1013.0)
+        
+        # Create all required weather features with reasonable estimates
+        input_data['weather_time'] = 0  # Time feature (could be hour of day)
+        
+        # Temperature features (estimate max/min from mean)
+        temp_variation = 5.0  # Assume ±5°C variation from mean
+        input_data['weather_temperature_2m_max'] = temp_mean + temp_variation
+        input_data['weather_temperature_2m_min'] = temp_mean - temp_variation
+        input_data['weather_temperature_2m_mean'] = temp_mean
+        
+        # Humidity features (estimate max/min from mean)
+        humidity_variation = 10.0  # Assume ±10% variation from mean
+        input_data['weather_relative_humidity_2m_max'] = min(100, humidity_mean + humidity_variation)
+        input_data['weather_relative_humidity_2m_min'] = max(0, humidity_mean - humidity_variation)
+        input_data['weather_relative_humidity_2m_mean'] = humidity_mean
+        
+        # Precipitation features
+        input_data['weather_precipitation_sum'] = precipitation
+        input_data['weather_rain_sum'] = precipitation  # Assume all precipitation is rain
+        input_data['weather_snowfall_sum'] = 0.0  # No snow in India generally
+        
+        # Wind features (estimate max from mean)
+        wind_variation = 3.0  # Assume wind gusts are ~3 km/h higher
+        input_data['weather_wind_speed_10m_max'] = wind_speed_mean + wind_variation
+        input_data['weather_wind_speed_10m_mean'] = wind_speed_mean
+        input_data['weather_wind_direction_10m_dominant'] = wind_direction
+        input_data['weather_wind_gusts_10m_max'] = wind_speed_mean + wind_variation + 2.0  # Gusts are higher
+        
+        # Pressure and sunshine
+        input_data['weather_pressure_msl_mean'] = pressure
+        input_data['weather_sunshine_duration'] = 28800.0  # 8 hours default sunshine
         
         # Add time features
         date_obj = pd.to_datetime(date)
@@ -331,6 +648,22 @@ def make_realtime_prediction(pollutant_data, weather_data, city, date):
         }
         input_data['city_encoded'] = city_mapping.get(city, 10)  # Default to Delhi
         
+        # Log feature engineering
+        sp_logger.log_calculation(
+            calc_type="FEATURE_ENGINEERING",
+            input_data={
+                'raw_pollutants': len(pollutant_data),
+                'raw_weather': len(weather_data),
+                'city': city,
+                'date': str(date)
+            },
+            result={
+                'total_features': len(input_data),
+                'city_encoded': input_data['city_encoded'],
+                'season_encoded': input_data['season_encoded']
+            }
+        )
+        
         # Create DataFrame with all required features
         input_df = pd.DataFrame([input_data])
         
@@ -342,11 +675,47 @@ def make_realtime_prediction(pollutant_data, weather_data, city, date):
         # Select features in the same order as training
         input_df = input_df[features].fillna(0)
         
-        # Make prediction
-        prediction = model.predict(input_df)[0]
+        # Make prediction - multi-output model returns pollutant concentrations
+        prediction_start = time.time()
+        pollutant_predictions = model.predict(input_df)[0]  # Array of pollutant concentrations
+        prediction_time = (time.time() - prediction_start) * 1000
         
-        # Perform sanity check
-        sanity_result = sanity_check_aqi_prediction(pollutant_data, prediction)
+        # Map predictions to pollutant names
+        if aqi_targets:
+            pollutant_results = dict(zip(aqi_targets, pollutant_predictions))
+        else:
+            # Default target order: PM2.5, PM10, NO2, SO2, CO, O3
+            default_targets = ['PM2.5', 'PM10', 'NO2', 'SO2', 'CO', 'O3']
+            pollutant_results = dict(zip(default_targets[:len(pollutant_predictions)], pollutant_predictions))
+        
+        # Calculate AQI from individual pollutant predictions
+        predicted_aqi, individual_aqis = calculate_aqi_from_pollutants(pollutant_results)
+        
+        # Use predicted AQI for sanity check (for backward compatibility)
+        sanity_result = sanity_check_aqi_prediction(pollutant_data, predicted_aqi)
+        
+        total_duration = (time.time() - start_time) * 1000
+        
+        # Log successful model run with enhanced pollutant info
+        sp_logger.log_model_run(
+            model_type="Multi-Output Pollutant Random Forest",
+            input_features=input_data,
+            prediction_result={
+                'predicted_pollutants': pollutant_results,
+                'individual_aqis': individual_aqis,
+                'overall_aqi': float(predicted_aqi),
+                'is_reasonable': sanity_result['is_reasonable'],
+                'expected_range': sanity_result['expected_range'],
+                'issues_count': len(sanity_result['issues']),
+                'warnings_count': len(sanity_result['warnings'])
+            },
+            processing_time=total_duration,
+            model_metrics={
+                'total_features': len(features),
+                'zero_features': (input_df.iloc[0] == 0).sum(),
+                'prediction_time_ms': prediction_time
+            }
+        )
         
         # Enhanced DEBUG: Log prediction details for troubleshooting
         debug_info = {
@@ -387,15 +756,32 @@ def make_realtime_prediction(pollutant_data, weather_data, city, date):
             
             st.session_state.prediction_debug.append({
                 **debug_info,
-                'predicted_aqi': round(prediction, 1),
+                'predicted_pollutants': pollutant_results,
+                'individual_aqis': individual_aqis,
+                'predicted_aqi': round(predicted_aqi, 1),
                 'timestamp': datetime.now().strftime('%H:%M:%S'),
                 'sanity_issues': sanity_result['issues'],
                 'sanity_warnings': sanity_result['warnings']
             })
         
-        return prediction
+        return predicted_aqi, pollutant_results, individual_aqis
         
     except Exception as e:
+        total_duration = (time.time() - start_time) * 1000
+        
+        # Log model prediction error
+        sp_logger.log_error(
+            error_type="MODEL_PREDICTION_ERROR",
+            error_message=str(e),
+            context={
+                'city': city,
+                'date': str(date),
+                'pollutant_data': pollutant_data,
+                'weather_data': weather_data
+            },
+            traceback_info=traceback.format_exc()
+        )
+        
         st.error(f"Error making prediction: {e}")
         return None
 
@@ -418,6 +804,8 @@ def get_city_info(city):
 # Weather data fetching functions for different time periods
 def get_weather_for_date(city, date_obj):
     """Fetch weather data for a specific date (past, present, or future)"""
+    start_time = time.time()
+    
     try:
         # Get city coordinates
         city_coords = get_city_coordinates(city)
@@ -436,6 +824,7 @@ def get_weather_for_date(city, date_obj):
                 'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,wind_speed_10m_max,precipitation_sum',
                 'past_days': 7  # Get past 7 days of data
             }
+            weather_type = "historical"
         else:
             # Current and future weather data (forecast API handles both)
             url = "https://api.open-meteo.com/v1/forecast"
@@ -447,6 +836,7 @@ def get_weather_for_date(city, date_obj):
                     'current': 'temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure',
                     'daily': 'precipitation_sum'  # Get daily precipitation
                 }
+                weather_type = "current"
             else:
                 # For future dates, get daily forecast
                 params = {
@@ -455,11 +845,31 @@ def get_weather_for_date(city, date_obj):
                     'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,wind_speed_10m_max,precipitation_sum',
                     'forecast_days': 7  # Get up to 7 days of forecast
                 }
+                weather_type = "forecast"
+        
+        # Log weather API call
+        sp_logger.log_api_call(
+            api_name="Open Meteo Weather API",
+            endpoint=url,
+            params={**params, 'city': city, 'date': target_date, 'type': weather_type},
+            response_status='INITIATED'
+        )
         
         response = requests.get(url, params=params, timeout=10)
+        duration = (time.time() - start_time) * 1000
         
         if response.status_code == 200:
             data = response.json()
+            
+            # Log successful API response
+            sp_logger.log_api_call(
+                api_name="Open Meteo Weather API",
+                endpoint=url,
+                params={**params, 'city': city, 'date': target_date, 'type': weather_type},
+                response_status='SUCCESS',
+                response_size=len(str(data)),
+                duration=duration
+            )
             
             if date_obj == today and 'current' in data:
                 # Current weather
@@ -506,13 +916,41 @@ def get_weather_for_date(city, date_obj):
                         'T': 25.0, 'RH': 65.0, 'WS': 5.0, 'WD': 180.0, 'RF': 0.0, 'BP': 1013.0
                     }
             
+            # Log weather data processing
+            sp_logger.log_calculation(
+                calc_type="WEATHER_DATA_PROCESSING",
+                input_data={'city': city, 'date': target_date, 'type': weather_type, 'coordinates': [lat, lon]},
+                result=weather_data,
+                duration=duration
+            )
+            
             return weather_data
             
         else:
+            # Log API error
+            sp_logger.log_api_call(
+                api_name="Open Meteo Weather API",
+                endpoint=url,
+                params={**params, 'city': city, 'date': target_date, 'type': weather_type},
+                response_status='ERROR',
+                duration=duration,
+                error=f"HTTP {response.status_code}"
+            )
+            
             st.warning(f"Weather API returned status {response.status_code}, using default values")
             return {'T': 25.0, 'RH': 65.0, 'WS': 5.0, 'WD': 180.0, 'RF': 0.0, 'BP': 1013.0}
             
     except Exception as e:
+        duration = (time.time() - start_time) * 1000
+        
+        # Log weather fetch error
+        sp_logger.log_error(
+            error_type="WEATHER_API_ERROR",
+            error_message=str(e),
+            context={'city': city, 'date': target_date if 'target_date' in locals() else str(date_obj)},
+            traceback_info=traceback.format_exc()
+        )
+        
         st.warning(f"Error fetching weather data: {str(e)}, using default values")
         return {'T': 25.0, 'RH': 65.0, 'WS': 5.0, 'WD': 180.0, 'RF': 0.0, 'BP': 1013.0}
 
@@ -545,6 +983,16 @@ def format_weather_data_for_display(weather_data):
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_realtime_api_data(limit=1000, state=None, city=None, max_pages=50):
     """Fetch real-time AQI data from the government API with pagination"""
+    start_time = time.time()
+    
+    # Log API call initiation
+    sp_logger.log_api_call(
+        api_name="Government AQI API", 
+        endpoint=API_BASE_URL,
+        params={'limit': limit, 'state': state, 'city': city, 'max_pages': max_pages},
+        response_status='INITIATED'
+    )
+    
     all_records = []
     page_limit = min(limit, 1000)  # API might have max limit per request
     
@@ -552,56 +1000,113 @@ def fetch_realtime_api_data(limit=1000, state=None, city=None, max_pages=50):
     api_limit = min(1000, limit)  # Try to get up to 1000 per request
     total_requests = min(max_pages, (limit // api_limit) + 1)
     
-    for page in range(total_requests):
-        params = {
-            'api-key': API_KEY,
-            'format': 'json',
-            'limit': api_limit,
-            'offset': page * api_limit
-        }
-        
-        # Add filters if specified
-        if state:
-            params['filters[state]'] = state.replace(' ', '_')
-        if city:
-            params['filters[city]'] = city
-        
-        try:
-            response = requests.get(API_BASE_URL, params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
+    try:
+        for page in range(total_requests):
+            params = {
+                'api-key': API_KEY,
+                'format': 'json',
+                'limit': api_limit,
+                'offset': page * api_limit
+            }
             
-            if 'records' in data and data['records']:
-                all_records.extend(data['records'])
+            # Add filters if specified
+            if state:
+                params['filters[state]'] = state.replace(' ', '_')
+            if city:
+                params['filters[city]'] = city
+            
+            try:
+                page_start_time = time.time()
+                response = requests.get(API_BASE_URL, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                page_duration = (time.time() - page_start_time) * 1000
                 
-                # Show pagination info
-                if page == 0:  # Show info only on first request
-                    total_available = data.get('total', 0)
-                    records_fetched = len(data['records'])
-                    st.info(f"📊 Total records available: {total_available:,} | Fetching up to {limit:,} records | Got {records_fetched} records per request")
+                # Log successful page request
+                sp_logger.log_api_call(
+                    api_name="Government AQI API",
+                    endpoint=API_BASE_URL,
+                    params={**params, 'api-key': '[HIDDEN]', 'page': page},
+                    response_status='SUCCESS',
+                    response_size=len(str(data)),
+                    duration=page_duration
+                )
                 
-                # Break if we've got enough records or no more data
-                if len(all_records) >= limit or len(data['records']) < api_limit:
+                if 'records' in data and data['records']:
+                    all_records.extend(data['records'])
+                    
+                    # Show pagination info
+                    if page == 0:  # Show info only on first request
+                        total_available = data.get('total', 0)
+                        records_fetched = len(data['records'])
+                        st.info(f"📊 Total records available: {total_available:,} | Fetching up to {limit:,} records | Got {records_fetched} records per request")
+                    
+                    # Break if we've got enough records or no more data
+                    if len(all_records) >= limit or len(data['records']) < api_limit:
+                        break
+                else:
                     break
-            else:
-                break
+                    
+            except requests.exceptions.RequestException as e:
+                page_duration = (time.time() - page_start_time) * 1000
                 
-        except requests.exceptions.RequestException as e:
-            if page == 0:  # Only show error on first request
-                st.error(f"Error fetching data from API: {e}")
-            break
-    
-    if all_records:
-        df = pd.DataFrame(all_records[:limit])  # Limit to requested number
-        st.success(f"✅ Successfully fetched {len(df):,} records from API")
-        return df
-    else:
-        st.warning("No records found in API response")
-        # Fallback to CSV file if API fails
-        try:
-            return pd.read_csv(REALTIME_PATH)
-        except:
-            return pd.DataFrame()
+                # Log API error
+                sp_logger.log_api_call(
+                    api_name="Government AQI API",
+                    endpoint=API_BASE_URL,
+                    params={**params, 'api-key': '[HIDDEN]', 'page': page},
+                    response_status='ERROR',
+                    duration=page_duration,
+                    error=str(e)
+                )
+                
+                if page == 0:  # Only show error on first request
+                    st.error(f"Error fetching data from API: {e}")
+                break
+        
+        total_duration = (time.time() - start_time) * 1000
+        
+        if all_records:
+            df = pd.DataFrame(all_records[:limit])  # Limit to requested number
+            st.success(f"✅ Successfully fetched {len(df):,} records from API")
+            
+            # Log successful data fetch
+            sp_logger.log_calculation(
+                calc_type="API_DATA_PROCESSING",
+                input_data={'total_records': len(all_records), 'pages_fetched': page + 1},
+                result={'final_records': len(df), 'columns': list(df.columns)},
+                duration=total_duration
+            )
+            
+            return df
+        else:
+            # Log fallback to CSV
+            sp_logger.log_error(
+                error_type="API_NO_DATA",
+                error_message="No records found in API response, falling back to CSV",
+                context={'limit': limit, 'state': state, 'city': city}
+            )
+            
+            st.warning("No records found in API response")
+            # Fallback to CSV file if API fails
+            try:
+                return pd.read_csv(REALTIME_PATH)
+            except:
+                return pd.DataFrame()
+                
+    except Exception as e:
+        total_duration = (time.time() - start_time) * 1000
+        
+        # Log unexpected error
+        sp_logger.log_error(
+            error_type="API_UNEXPECTED_ERROR",
+            error_message=str(e),
+            context={'limit': limit, 'state': state, 'city': city},
+            traceback_info=traceback.format_exc()
+        )
+        
+        st.error(f"Unexpected error during API fetch: {e}")
+        return pd.DataFrame()
 
 # Helper: AQI category bins (India CPCB standard)
 def get_aqi_category(aqi):
@@ -617,6 +1122,51 @@ def get_aqi_category(aqi):
         return 'Very Poor'
     else:
         return 'Severe'
+
+def calculate_aqi_from_pollutants(pollutant_dict):
+    """
+    Calculate AQI from individual pollutant concentrations using standard AQI formulas.
+    This is more accurate than predicting AQI directly.
+    """
+    # Standard AQI breakpoints for India (CPCB)
+    aqi_breakpoints = {
+        'PM2.5': [(0, 30, 0, 50), (30, 60, 51, 100), (60, 90, 101, 200), 
+                  (90, 120, 201, 300), (120, 250, 301, 400), (250, float('inf'), 401, 500)],
+        'PM10': [(0, 50, 0, 50), (50, 100, 51, 100), (100, 250, 101, 200),
+                 (250, 350, 201, 300), (350, 430, 301, 400), (430, float('inf'), 401, 500)],
+        'NO2': [(0, 40, 0, 50), (40, 80, 51, 100), (80, 180, 101, 200),
+                (180, 280, 201, 300), (280, 400, 301, 400), (400, float('inf'), 401, 500)],
+        'SO2': [(0, 40, 0, 50), (40, 80, 51, 100), (80, 380, 101, 200),
+                (380, 800, 201, 300), (800, 1600, 301, 400), (1600, float('inf'), 401, 500)],
+        'CO': [(0, 1.0, 0, 50), (1.0, 2.0, 51, 100), (2.0, 10, 101, 200),
+               (10, 17, 201, 300), (17, 34, 301, 400), (34, float('inf'), 401, 500)],
+        'O3': [(0, 50, 0, 50), (50, 100, 51, 100), (100, 168, 101, 200),
+               (168, 208, 201, 300), (208, 748, 301, 400), (748, float('inf'), 401, 500)]
+    }
+    
+    def get_aqi_for_pollutant(pollutant, concentration):
+        if pollutant not in aqi_breakpoints:
+            return 0
+        
+        for bp_lo, bp_hi, aqi_lo, aqi_hi in aqi_breakpoints[pollutant]:
+            if bp_lo <= concentration <= bp_hi:
+                # Linear interpolation
+                aqi = ((aqi_hi - aqi_lo) / (bp_hi - bp_lo)) * (concentration - bp_lo) + aqi_lo
+                return int(aqi)
+        return 500  # Maximum AQI
+    
+    # Calculate AQI for each pollutant
+    aqi_values = []
+    individual_aqis = {}
+    for pollutant, concentration in pollutant_dict.items():
+        if pollutant in aqi_breakpoints and concentration > 0:
+            aqi_val = get_aqi_for_pollutant(pollutant, concentration)
+            aqi_values.append(aqi_val)
+            individual_aqis[pollutant] = aqi_val
+    
+    # Return maximum AQI (worst pollutant determines overall AQI)
+    overall_aqi = max(aqi_values) if aqi_values else 50
+    return overall_aqi, individual_aqis
 
 # Load and clean yearly/state datasets
 def load_yearly_data():
@@ -847,7 +1397,7 @@ def main():
         model_metrics = {'weather_model_loaded': True}
 
     # Tabs for navigation
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(['📊 Dashboard', '🔮 Smart Prediction', '🧪 Manual Prediction', '🌍 Real-Time Insights', '🔧 Debug Center'])
+    tab1, tab2, tab3, tab4 = st.tabs(['📊 Dashboard', '🔮 Smart Prediction', '🧪 Manual Prediction', '🌍 Real-Time Insights'])
 
     # ----------------------
     # Dashboard Tab
@@ -900,6 +1450,15 @@ def main():
     # Real-Time AQI Prediction Tool Tab
     # ----------------------
     with tab2:
+        # Start logging session when Smart Prediction tab is accessed
+        if 'smart_prediction_session_started' not in st.session_state:
+            st.session_state.smart_prediction_session_started = True
+            sp_logger.start_session()
+            sp_logger.log_user_action(
+                action_type="TAB_ACCESS",
+                details={'tab_name': 'Smart Prediction', 'model_available': model_available}
+            )
+        
         st.header('🤖 AQI Prediction Tool')
         st.markdown('**Predict AQI using live pollutant data with historical, current, or forecast weather information**')
         
@@ -928,12 +1487,24 @@ def main():
                                              'Tamil Nadu', 'West Bengal', 'Gujarat', 'Rajasthan', 'Bihar', 
                                              'Madhya Pradesh', 'Punjab', 'Haryana', 'Telangana'], index=0)
                 
+                # Log city and state selection
+                sp_logger.log_user_action(
+                    action_type="LOCATION_SELECTION",
+                    details={'selected_city': selected_city, 'selected_state': selected_state}
+                )
+                
                 # Date selection (7 days past to 7 days future)
                 selected_date = st.date_input('Date', 
                                             value=datetime.now().date(),
                                             min_value=datetime.now().date() - timedelta(days=7), 
                                             max_value=datetime.now().date() + timedelta(days=7),
                                             help="Select any date within 7 days past or future for prediction")
+                
+                # Log date selection
+                sp_logger.log_user_action(
+                    action_type="DATE_SELECTION",
+                    details={'selected_date': str(selected_date), 'date_type': 'user_input'}
+                )
                 
                 # Show prediction type based on selected date
                 today = datetime.now().date()
@@ -957,9 +1528,33 @@ def main():
                 use_average = st.checkbox('Use average values from multiple stations', value=True,
                                         help='Average pollutant values from all stations in the city for more stable predictions')
                 
+                # Log prediction settings
+                sp_logger.log_user_action(
+                    action_type="PREDICTION_SETTINGS",
+                    details={
+                        'max_records': max_records,
+                        'use_average': use_average,
+                        'prediction_type': prediction_type
+                    }
+                )
+                
                 # Dynamic prediction button based on date
                 button_text = "🔮 Get AQI Prediction" if selected_date != today else "⚡ Get Real-Time AQI Prediction"
                 if st.button(button_text, type='primary'):
+                    # Log button click
+                    sp_logger.log_user_action(
+                        action_type="PREDICTION_BUTTON_CLICK",
+                        details={
+                            'button_text': button_text,
+                            'city': selected_city,
+                            'state': selected_state,
+                            'date': str(selected_date),
+                            'prediction_type': prediction_type,
+                            'max_records': max_records,
+                            'use_average': use_average
+                        }
+                    )
+                    
                     # Dynamic spinner message based on date
                     if selected_date < today:
                         spinner_msg = f'🔄 Fetching pollutant data and historical weather for {selected_date}...'
@@ -1009,10 +1604,19 @@ def main():
                                     weather_data = {'T': 25.0, 'RH': 65.0, 'WS': 5.0, 'WD': 180.0, 'RF': 0.0, 'BP': 1013.0}
                                 
                                 # Make prediction
-                                predicted_aqi = make_realtime_prediction(pollutant_data, weather_data, 
-                                                                       selected_city, selected_date)
+                                prediction_result = make_realtime_prediction(pollutant_data, weather_data, 
+                                                                           selected_city, selected_date)
                                 
-                                if predicted_aqi is not None:
+                                if prediction_result is not None:
+                                    # Unpack the new multi-output results
+                                    if len(prediction_result) == 3:
+                                        predicted_aqi, pollutant_results, individual_aqis = prediction_result
+                                    else:
+                                        # Backward compatibility
+                                        predicted_aqi = prediction_result
+                                        pollutant_results = {}
+                                        individual_aqis = {}
+                                    
                                     predicted_category = get_aqi_category(predicted_aqi)
                                     
                                     # Display results with dynamic message
@@ -1024,6 +1628,19 @@ def main():
                                         success_msg = "✅ Real-Time Prediction Complete!"
                                     
                                     st.success(success_msg)
+                                    
+                                    # Log successful prediction result
+                                    sp_logger.log_user_action(
+                                        action_type="PREDICTION_SUCCESS",
+                                        details={
+                                            'predicted_aqi': float(predicted_aqi),
+                                            'predicted_category': predicted_category,
+                                            'success_message': success_msg,
+                                            'city': selected_city,
+                                            'date': str(selected_date),
+                                            'prediction_type': prediction_type
+                                        }
+                                    )
                                     
                                     result_col1, result_col2, result_col3 = st.columns(3)
                                     
@@ -1052,6 +1669,58 @@ def main():
                                             health_msg = "Emergency Conditions"
                                         st.metric('🏥 Health Impact', health_msg)
                                     
+                                    # NEW: Display individual pollutant predictions
+                                    if pollutant_results:
+                                        st.subheader("🔬 Individual Pollutant Predictions")
+                                        
+                                        # Create columns for pollutant display
+                                        poll_cols = st.columns(min(3, len(pollutant_results)))
+                                        pollutants_list = list(pollutant_results.items())
+                                        
+                                        for i, (pollutant, concentration) in enumerate(pollutants_list):
+                                            with poll_cols[i % len(poll_cols)]:
+                                                # Get individual AQI for this pollutant
+                                                individual_aqi = individual_aqis.get(pollutant, 0)
+                                                individual_category = get_aqi_category(individual_aqi)
+                                                
+                                                # Determine units
+                                                if pollutant in ['PM2.5', 'PM10']:
+                                                    unit = 'μg/m³'
+                                                elif pollutant in ['NO2', 'SO2', 'O3']:
+                                                    unit = 'ppb'
+                                                elif pollutant == 'CO':
+                                                    unit = 'mg/m³'
+                                                else:
+                                                    unit = ''
+                                                
+                                                # Color coding based on individual AQI
+                                                color_map = {'Good': '🟢', 'Satisfactory': '🟡', 'Moderate': '🟠', 
+                                                           'Poor': '🔴', 'Very Poor': '🟣', 'Severe': '⚫'}
+                                                color = color_map.get(individual_category, '❔')
+                                                
+                                                st.metric(
+                                                    f'{color} {pollutant}',
+                                                    f'{concentration:.1f} {unit}',
+                                                    delta=f'AQI: {individual_aqi}'
+                                                )
+                                        
+                                        # Show which pollutant is driving the overall AQI
+                                        max_pollutant = max(individual_aqis.items(), key=lambda x: x[1]) if individual_aqis else None
+                                        if max_pollutant:
+                                            st.info(f"🚨 **Primary Concern**: {max_pollutant[0]} is driving the overall AQI with a value of {max_pollutant[1]}")
+                                    
+                                    # Log health impact result
+                                    sp_logger.log_user_action(
+                                        action_type="HEALTH_IMPACT_DISPLAYED",
+                                        details={
+                                            'health_message': health_msg,
+                                            'aqi_value': float(predicted_aqi),
+                                            'category': predicted_category,
+                                            'individual_pollutants': pollutant_results,
+                                            'individual_aqis': individual_aqis
+                                        }
+                                    )
+                                    
                                     # Show data sources
                                     st.subheader("📊 Data Sources Used")
                                     
@@ -1077,60 +1746,21 @@ def main():
                                         weather_df = pd.DataFrame([formatted_weather])
                                         st.dataframe(weather_df, use_container_width=True)
                                     
-                                    # Debug section to investigate AQI prediction discrepancies
-                                    if hasattr(st, 'session_state') and hasattr(st.session_state, 'prediction_debug') and st.session_state.prediction_debug:
-                                        with st.expander("🔍 Prediction Debug Info (Click to investigate AQI calculation)"):
-                                            latest_debug = st.session_state.prediction_debug[-1]  # Get the most recent debug info
-                                            
-                                            st.write("**🎯 Prediction Analysis:**")
-                                            debug_col1, debug_col2 = st.columns(2)
-                                            
-                                            with debug_col1:
-                                                st.write("**📊 Key Inputs:**")
-                                                st.write(f"🏙️ City: {latest_debug['city']} (encoded: {latest_debug['city_encoded']})")
-                                                st.write(f"🧪 PM2.5: {latest_debug['key_pollutants']['PM2.5']}")
-                                                st.write(f"🧪 PM10: {latest_debug['key_pollutants']['PM10']}")
-                                                st.write(f"🧪 NO2: {latest_debug['key_pollutants']['NO2']}")
-                                                st.write(f"🧪 SO2: {latest_debug['key_pollutants']['SO2']}")
-                                                
-                                            with debug_col2:
-                                                st.write("**🌤️ Weather & Features:**")
-                                                st.write(f"🌡️ Temperature: {latest_debug['key_weather']['Temperature']}°C")
-                                                st.write(f"💧 Humidity: {latest_debug['key_weather']['Humidity']}%")
-                                                st.write(f"💨 Wind Speed: {latest_debug['key_weather']['Wind_Speed']} km/h")
-                                                st.write(f"📊 Total Features: {latest_debug['feature_stats']['total_features']}")
-                                                st.write(f"⭕ Zero Features: {latest_debug['feature_stats']['zero_features']}")
-                                            
-                                            st.write(f"**🎯 Final Prediction: {latest_debug['predicted_aqi']} AQI**")
-                                            
-                                            # Show sanity check results
-                                            st.write("**🔍 Sanity Check Results:**")
-                                            if latest_debug.get('sanity_check', {}).get('is_reasonable', False):
-                                                st.success(f"✅ Prediction appears reasonable for PM2.5 = {latest_debug['key_pollutants']['PM2.5']}")
-                                                st.write(f"Expected range: {latest_debug['sanity_check']['expected_range'][0]}-{latest_debug['sanity_check']['expected_range'][1]} AQI")
-                                            else:
-                                                st.error(f"🚨 Prediction may be unreasonable for PM2.5 = {latest_debug['key_pollutants']['PM2.5']}")
-                                                st.write(f"Expected range: {latest_debug['sanity_check']['expected_range'][0]}-{latest_debug['sanity_check']['expected_range'][1]} AQI")
-                                            
-                                            # Show issues and warnings from sanity check
-                                            if 'sanity_issues' in latest_debug and latest_debug['sanity_issues']:
-                                                st.error("**🚨 Critical Issues:**")
-                                                for issue in latest_debug['sanity_issues']:
-                                                    st.write(f"• {issue}")
-                                            
-                                            if 'sanity_warnings' in latest_debug and latest_debug['sanity_warnings']:
-                                                st.warning("**⚠️ Warnings:**")
-                                                for warning in latest_debug['sanity_warnings']:
-                                                    st.write(f"• {warning}")
-                                            
-                                            # Additional feature analysis
-                                            if latest_debug['feature_stats']['zero_features'] > latest_debug['feature_stats']['total_features'] * 0.7:
-                                                st.info("ℹ️ >70% of features are zero - prediction relies heavily on available data")
-                                            
-                                            st.write(f"*Debug timestamp: {latest_debug['timestamp']}*")
+
                                 
                                 else:
                                     st.error("❌ Unable to make prediction. Please try again.")
+                                    
+                                    # Log prediction failure
+                                    sp_logger.log_user_action(
+                                        action_type="PREDICTION_FAILED",
+                                        details={
+                                            'city': selected_city,
+                                            'date': str(selected_date),
+                                            'prediction_type': prediction_type,
+                                            'error': 'Unable to make prediction'
+                                        }
+                                    )
                 
             with col2:
                 st.subheader("📈 Model Information")
@@ -1169,11 +1799,37 @@ def main():
                         st.write(f"🌍 Region: {city_info['region']}")
                         if 'population' in city_info:
                             st.write(f"👥 Population: {city_info['population']}")
+                            
+                        # Log city information display
+                        sp_logger.log_user_action(
+                            action_type="CITY_INFO_DISPLAYED",
+                            details={
+                                'city': selected_city,
+                                'coordinates': [city_info['lat'], city_info['lon']],
+                                'region': city_info['region'],
+                                'population': city_info.get('population', 'N/A')
+                            }
+                        )
+                        
         else:
             st.error("⚠️ Weather-Enhanced AQI Model not available!")
             st.warning("Please run the data processing pipeline first:")
             st.code("python retrain_model.py", language="bash")
             st.info("This will load the pre-trained model with weather data integration.")
+        
+        # Log session end when user finishes using the Smart Prediction tab
+        # This runs at the end of the Smart Prediction tab code
+        try:
+            if 'sp_logger' in locals() and sp_logger:
+                sp_logger.end_session(
+                    summary={
+                        'tab_accessed': 'Smart Prediction',
+                        'session_duration': None,
+                        'total_actions': len(sp_logger.session_log) if hasattr(sp_logger, 'session_log') else 0
+                    }
+                )
+        except Exception as e:
+            logging.warning(f"Could not end Smart Prediction session: {e}")
 
     # ----------------------
     # Manual AQI Prediction Tab
@@ -1238,10 +1894,19 @@ def main():
                         }
                         
                         # Make prediction
-                        predicted_aqi = make_realtime_prediction(pollutant_data, weather_data, 
-                                                               selected_city, selected_date)
+                        prediction_result = make_realtime_prediction(pollutant_data, weather_data, 
+                                                                   selected_city, selected_date)
                         
-                        if predicted_aqi is not None:
+                        if prediction_result is not None:
+                            # Unpack the new multi-output results
+                            if isinstance(prediction_result, tuple) and len(prediction_result) == 3:
+                                predicted_aqi, pollutant_results, individual_aqis = prediction_result
+                            else:
+                                # Backward compatibility
+                                predicted_aqi = prediction_result
+                                pollutant_results = {}
+                                individual_aqis = {}
+                            
                             predicted_category = get_aqi_category(predicted_aqi)
                             
                             # Display results
@@ -1533,681 +2198,6 @@ def main():
         else:
             st.warning('⚠️ No real-time data available. Please check your connection or try refreshing.')
 
-    # Debug Center Tab
-    with tab5:
-        st.header('🔧 Debug Center')
-        st.markdown('**Comprehensive testing and debugging tools for AQI prediction model**')
-        
-        if model_available:
-            st.success("🎯 Model Available - Debug Tools Ready")
-            
-            # Debug options
-            debug_col1, debug_col2 = st.columns([1, 1])
-            
-            with debug_col1:
-                st.subheader("🧪 Model Testing")
-                
-                if st.button('🔍 Test All Cities', type='primary'):
-                    st.subheader("📋 All Cities Prediction Test - **Using Real Data**")
-                    
-                    # List of all cities with coordinates
-                    test_cities = {
-                        'Delhi': {'lat': 28.6139, 'lon': 77.2090},
-                        'Mumbai': {'lat': 19.0760, 'lon': 72.8777},
-                        'Kolkata': {'lat': 22.5726, 'lon': 88.3639},
-                        'Chennai': {'lat': 13.0827, 'lon': 80.2707},
-                        'Bengaluru': {'lat': 12.9716, 'lon': 77.5946},
-                        'Hyderabad': {'lat': 17.3850, 'lon': 78.4867},
-                        'Ahmedabad': {'lat': 23.0225, 'lon': 72.5714},
-                        'Pune': {'lat': 18.5204, 'lon': 73.8567},
-                        'Jaipur': {'lat': 26.9124, 'lon': 75.7873},
-                        'Lucknow': {'lat': 26.8467, 'lon': 80.9462},
-                        'Kanpur': {'lat': 26.4499, 'lon': 80.3319},
-                        'Nagpur': {'lat': 21.1458, 'lon': 79.0882}
-                    }
-                    
-                    results = []
-                    debug_logs = []
-                    
-                    st.info("🌐 Fetching real-time data from APIs for each city...")
-                    
-                    for city, coords in test_cities.items():
-                        with st.spinner(f'🔄 Fetching real data for {city}...'):
-                            
-                            # 1. Fetch real weather data from Open Meteo
-                            weather_data = None
-                            try:
-                                weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={coords['lat']}&longitude={coords['lon']}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure&daily=precipitation_sum&timezone=auto"
-                                weather_response = requests.get(weather_url, timeout=10)
-                                
-                                if weather_response.status_code == 200:
-                                    weather_json = weather_response.json()
-                                    current = weather_json.get('current', {})
-                                    daily = weather_json.get('daily', {})
-                                    
-                                    weather_data = {
-                                        'T': current.get('temperature_2m', 25),
-                                        'RH': current.get('relative_humidity_2m', 65),
-                                        'WS': current.get('wind_speed_10m', 6),
-                                        'WD': current.get('wind_direction_10m', 180),
-                                        'RF': daily.get('precipitation_sum', [0])[0] if daily.get('precipitation_sum') else 0,
-                                        'BP': current.get('surface_pressure', 1013)
-                                    }
-                                    debug_logs.append(f"✅ {city}: Weather fetched - T:{weather_data['T']}°C, RH:{weather_data['RH']}%")
-                                else:
-                                    debug_logs.append(f"❌ {city}: Weather API error {weather_response.status_code}")
-                                    
-                            except Exception as e:
-                                debug_logs.append(f"❌ {city}: Weather fetch error - {str(e)}")
-                            
-                            # 2. Fetch real pollutant data from government API  
-                            pollutant_data = None
-                            try:
-                                # Temporarily suppress Streamlit messages for cleaner debug output
-                                with st.spinner(f'Fetching pollutant data for {city}...'):
-                                    # Use the existing function to fetch real-time data for this city
-                                    old_write = st.write
-                                    old_success = st.success
-                                    old_info = st.info
-                                    old_warning = st.warning
-                                    old_error = st.error
-                                    
-                                    # Temporarily disable Streamlit output
-                                    st.write = lambda *args, **kwargs: None
-                                    st.success = lambda *args, **kwargs: None
-                                    st.info = lambda *args, **kwargs: None
-                                    st.warning = lambda *args, **kwargs: None
-                                    st.error = lambda *args, **kwargs: None
-                                    
-                                    try:
-                                        city_df = fetch_realtime_api_data(limit=50, city=city)
-                                    finally:
-                                        # Restore Streamlit output functions
-                                        st.write = old_write
-                                        st.success = old_success
-                                        st.info = old_info
-                                        st.warning = old_warning
-                                        st.error = old_error
-                                
-                                if not city_df.empty and len(city_df) > 0:
-                                    # Process the API response - each row is a different pollutant
-                                    pollutants = {}
-                                    
-                                    for _, record in city_df.iterrows():
-                                        pollutant_id = str(record.get('pollutant_id', '')).strip()
-                                        avg_value = record.get('pollutant_avg', record.get('avg_value', 0))
-                                        
-                                        # Convert to float
-                                        try:
-                                            avg_value = float(avg_value) if avg_value not in [None, '', 'NA', 'N/A'] else 0
-                                        except (ValueError, TypeError):
-                                            avg_value = 0
-                                        
-                                        # Map API pollutant names to our format
-                                        pollutant_mapping = {
-                                            'PM2.5': 'PM2.5', 'PM10': 'PM10', 'NO': 'NO', 'NO2': 'NO2', 
-                                            'NOX': 'NOx', 'NH3': 'NH3', 'CO': 'CO', 'SO2': 'SO2', 'O3': 'O3',
-                                            'BENZENE': 'Benzene', 'TOLUENE': 'Toluene', 'XYLENE': 'Xylene',
-                                            'C6H6': 'Benzene', 'C7H8': 'Toluene', 'C8H10': 'Xylene'
-                                        }
-                                        
-                                        mapped_pollutant = pollutant_mapping.get(pollutant_id.upper(), pollutant_id)
-                                        if mapped_pollutant and avg_value > 0:
-                                            pollutants[mapped_pollutant] = avg_value
-                                    
-                                    # Create complete pollutant data with defaults for missing values
-                                    if pollutants:
-                                        # City-specific realistic defaults for missing pollutants
-                                        city_defaults = {
-                                            'Delhi': {'PM2.5': 150, 'PM10': 200, 'NO2': 45, 'SO2': 30},
-                                            'Mumbai': {'PM2.5': 70, 'PM10': 120, 'NO2': 35, 'SO2': 25},
-                                            'Kolkata': {'PM2.5': 90, 'PM10': 150, 'NO2': 40, 'SO2': 28},
-                                            'Chennai': {'PM2.5': 50, 'PM10': 80, 'NO2': 25, 'SO2': 18},
-                                            'Bengaluru': {'PM2.5': 55, 'PM10': 90, 'NO2': 30, 'SO2': 20},
-                                            'Hyderabad': {'PM2.5': 65, 'PM10': 110, 'NO2': 35, 'SO2': 22},
-                                            'Ahmedabad': {'PM2.5': 85, 'PM10': 140, 'NO2': 38, 'SO2': 26},
-                                            'Pune': {'PM2.5': 60, 'PM10': 100, 'NO2': 32, 'SO2': 21},
-                                            'Jaipur': {'PM2.5': 95, 'PM10': 160, 'NO2': 40, 'SO2': 24},
-                                            'Lucknow': {'PM2.5': 110, 'PM10': 180, 'NO2': 42, 'SO2': 27},
-                                            'Kanpur': {'PM2.5': 125, 'PM10': 190, 'NO2': 44, 'SO2': 29},
-                                            'Nagpur': {'PM2.5': 75, 'PM10': 125, 'NO2': 33, 'SO2': 23}
-                                        }
-                                        
-                                        defaults = city_defaults.get(city, city_defaults['Delhi'])
-                                        
-                                        pollutant_data = {
-                                            'PM2.5': pollutants.get('PM2.5', defaults['PM2.5']),
-                                            'PM10': pollutants.get('PM10', defaults['PM10']),
-                                            'NO': pollutants.get('NO', 15),
-                                            'NO2': pollutants.get('NO2', defaults['NO2']),
-                                            'NOx': pollutants.get('NOx', defaults['NO2'] + 15),
-                                            'NH3': pollutants.get('NH3', 10),
-                                            'CO': pollutants.get('CO', 1.8),
-                                            'SO2': pollutants.get('SO2', defaults['SO2']),
-                                            'O3': pollutants.get('O3', 70),
-                                            'Benzene': pollutants.get('Benzene', 3.5),
-                                            'Toluene': pollutants.get('Toluene', 8),
-                                            'Xylene': pollutants.get('Xylene', 6)
-                                        }
-                                        
-                                        # Log what we found
-                                        found_pollutants = [k for k, v in pollutants.items() if v > 0]
-                                        debug_logs.append(f"✅ {city}: Real pollutant data found - {', '.join(found_pollutants)} (Total: {len(found_pollutants)} pollutants)")
-                                        debug_logs.append(f"   PM2.5: {pollutant_data['PM2.5']:.1f}, PM10: {pollutant_data['PM10']:.1f}, NO2: {pollutant_data['NO2']:.1f}")
-                                    else:
-                                        debug_logs.append(f"⚠️ {city}: API returned data but no valid pollutant values found")
-                                else:
-                                    debug_logs.append(f"⚠️ {city}: API returned empty data, using defaults")
-                                    
-                            except Exception as e:
-                                debug_logs.append(f"⚠️ {city}: Pollutant fetch error - {str(e)}, using defaults")
-                            
-                            # Use default values if API fetch failed
-                            if pollutant_data is None:
-                                # City-specific realistic defaults
-                                city_defaults = {
-                                    'Delhi': {'PM2.5': 150, 'PM10': 200, 'NO2': 45, 'SO2': 30},
-                                    'Mumbai': {'PM2.5': 70, 'PM10': 120, 'NO2': 35, 'SO2': 25},
-                                    'Kolkata': {'PM2.5': 90, 'PM10': 150, 'NO2': 40, 'SO2': 28},
-                                    'Chennai': {'PM2.5': 50, 'PM10': 80, 'NO2': 25, 'SO2': 18},
-                                    'Bengaluru': {'PM2.5': 55, 'PM10': 90, 'NO2': 30, 'SO2': 20},
-                                    'Hyderabad': {'PM2.5': 65, 'PM10': 110, 'NO2': 35, 'SO2': 22},
-                                    'Ahmedabad': {'PM2.5': 85, 'PM10': 140, 'NO2': 38, 'SO2': 26},
-                                    'Pune': {'PM2.5': 60, 'PM10': 100, 'NO2': 32, 'SO2': 21},
-                                    'Jaipur': {'PM2.5': 95, 'PM10': 160, 'NO2': 40, 'SO2': 24},
-                                    'Lucknow': {'PM2.5': 110, 'PM10': 180, 'NO2': 42, 'SO2': 27},
-                                    'Kanpur': {'PM2.5': 125, 'PM10': 190, 'NO2': 44, 'SO2': 29},
-                                    'Nagpur': {'PM2.5': 75, 'PM10': 125, 'NO2': 33, 'SO2': 23}
-                                }
-                                
-                                defaults = city_defaults.get(city, city_defaults['Delhi'])
-                                pollutant_data = {
-                                    'PM2.5': defaults['PM2.5'], 'PM10': defaults['PM10'],
-                                    'NO': 15, 'NO2': defaults['NO2'], 'NOx': defaults['NO2'] + 15,
-                                    'NH3': 10, 'CO': 1.8, 'SO2': defaults['SO2'], 'O3': 70,
-                                    'Benzene': 3.5, 'Toluene': 8, 'Xylene': 6
-                                }
-                            
-                            if weather_data is None:
-                                # City-specific weather defaults
-                                weather_defaults = {
-                                    'Delhi': {'T': 28, 'RH': 60}, 'Mumbai': {'T': 30, 'RH': 75},
-                                    'Chennai': {'T': 32, 'RH': 70}, 'Bengaluru': {'T': 25, 'RH': 65},
-                                    'Kolkata': {'T': 29, 'RH': 80}, 'Hyderabad': {'T': 31, 'RH': 55}
-                                }
-                                defaults = weather_defaults.get(city, {'T': 27, 'RH': 65})
-                                weather_data = {**defaults, 'WS': 6, 'WD': 180, 'RF': 0, 'BP': 1013}
-                            
-                            # 3. Make prediction with real data
-                            pred = make_realtime_prediction(pollutant_data, weather_data, city, '2025-09-24')
-                            
-                            if pred is not None:
-                                status = "✅ Real Data Success" if 'Real pollutant data' in str(debug_logs[-2:]) else "✅ Default Data Success"
-                                results.append({
-                                    'City': city,
-                                    'Predicted_AQI': round(pred, 1),
-                                    'Category': get_aqi_category(pred),
-                                    'PM2.5': pollutant_data['PM2.5'],
-                                    'Temperature': weather_data['T'],
-                                    'Humidity': weather_data['RH'],
-                                    'Status': status
-                                })
-                                debug_logs.append(f"🎯 {city}: Final AQI = {pred:.1f}")
-                            else:
-                                results.append({
-                                    'City': city,
-                                    'Predicted_AQI': 'Error',
-                                    'Category': 'Error',
-                                    'PM2.5': 'N/A',
-                                    'Temperature': 'N/A', 
-                                    'Humidity': 'N/A',
-                                    'Status': '❌ Prediction Failed'
-                                })
-                                debug_logs.append(f"❌ {city}: Prediction failed")
-                    
-                    # Display results
-                    if results:
-                        df_results = pd.DataFrame(results)
-                        st.dataframe(df_results, use_container_width=True)
-                        
-                        # Download results as CSV
-                        csv_data = df_results.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download Results as CSV",
-                            data=csv_data,
-                            file_name=f"debug_city_test_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv",
-                            mime="text/csv"
-                        )
-                        
-                        # Statistics
-                        successful_preds = [r for r in results if '✅' in r['Status'] and isinstance(r['Predicted_AQI'], (int, float))]
-                        if successful_preds:
-                            aqi_values = [float(r['Predicted_AQI']) for r in successful_preds]
-                            
-                            if aqi_values:
-                                stats_col1, stats_col2, stats_col3, stats_col4 = st.columns(4)
-                                with stats_col1:
-                                    st.metric('🏙️ Cities Tested', len(test_cities))
-                                with stats_col2:
-                                    st.metric('📊 Min AQI', f"{min(aqi_values):.1f}")
-                                with stats_col3:
-                                    st.metric('📈 Max AQI', f"{max(aqi_values):.1f}")
-                                with stats_col4:
-                                    st.metric('🎯 Avg AQI', f"{sum(aqi_values)/len(aqi_values):.1f}")
-                                
-                                # Check for identical predictions
-                                unique_predictions = len(set(aqi_values))
-                                aqi_range = max(aqi_values) - min(aqi_values)
-                                
-                                if unique_predictions == 1:
-                                    st.error(f"🚨 **PROBLEM DETECTED**: All cities returned identical AQI value ({aqi_values[0]:.1f})")
-                                    st.info("This indicates an issue with the prediction model or feature processing.")
-                                elif aqi_range < 5:
-                                    st.error(f"🚨 **LOW VARIATION**: AQI range is only {aqi_range:.1f} points across all cities")
-                                    st.info("This suggests the model isn't responding properly to different city/weather/pollution data.")
-                                elif unique_predictions < len(aqi_values) * 0.3:  # Less than 30% unique
-                                    st.warning(f"⚠️ **LIMITED VARIATION**: Only {unique_predictions} unique predictions out of {len(aqi_values)} cities")
-                                else:
-                                    st.success(f"✅ **GOOD VARIATION**: {unique_predictions} unique predictions, range: {aqi_range:.1f} AQI points")
-                        
-                        # Debug logs
-                        with st.expander("🔍 Detailed Debug Logs"):
-                            for log in debug_logs:
-                                st.text(log)
-                
-                if st.button('🔬 Detailed Feature Analysis'):
-                    st.subheader("🔬 Feature Analysis")
-                    
-                    # Load model details
-                    model, features, available = load_weather_aqi_model()
-                    if available:
-                        st.success(f"📋 Model expects {len(features)} features")
-                        
-                        # Show feature names
-                        with st.expander("📝 Expected Feature Names"):
-                            feature_df = pd.DataFrame({'Feature_Name': features, 'Index': range(len(features))})
-                            st.dataframe(feature_df, use_container_width=True)
-                        
-                        # Test feature creation for Delhi with real data
-                        st.subheader("🧪 Feature Creation Test (Delhi with Real Data)")
-                        
-                        # Get real data for Delhi
-                        try:
-                            # Fetch real weather for Delhi
-                            weather_url = "https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure&daily=precipitation_sum&timezone=auto"
-                            weather_response = requests.get(weather_url, timeout=10)
-                            
-                            if weather_response.status_code == 200:
-                                weather_json = weather_response.json()
-                                current = weather_json.get('current', {})
-                                daily = weather_json.get('daily', {})
-                                
-                                test_weather = {
-                                    'T': current.get('temperature_2m', 26),
-                                    'RH': current.get('relative_humidity_2m', 68),
-                                    'WS': current.get('wind_speed_10m', 7),
-                                    'WD': current.get('wind_direction_10m', 200),
-                                    'RF': daily.get('precipitation_sum', [2])[0] if daily.get('precipitation_sum') else 2,
-                                    'BP': current.get('surface_pressure', 1015)
-                                }
-                                st.success("✅ Using real weather data from Open Meteo")
-                            else:
-                                test_weather = {'T': 26, 'RH': 68, 'WS': 7, 'WD': 200, 'RF': 2, 'BP': 1015}
-                                st.warning("⚠️ Using default weather data (API error)")
-                                
-                        except Exception as e:
-                            test_weather = {'T': 26, 'RH': 68, 'WS': 7, 'WD': 200, 'RF': 2, 'BP': 1015}
-                            st.warning(f"⚠️ Using default weather data (Error: {str(e)})")
-                        
-                        # Use realistic Delhi pollutant data
-                        test_pollutants = {'PM2.5': 150, 'PM10': 200, 'NO': 25, 'NO2': 45, 'NOx': 70, 'NH3': 20, 'CO': 3.0, 'SO2': 30, 'O3': 85, 'Benzene': 6.0, 'Toluene': 12, 'Xylene': 9}
-                        
-                        # Show input data
-                        st.subheader("📊 Input Data")
-                        input_col1, input_col2 = st.columns(2)
-                        
-                        with input_col1:
-                            st.text("🌡️ Weather Data:")
-                            for key, value in test_weather.items():
-                                st.text(f"  {key}: {value}")
-                        
-                        with input_col2:
-                            st.text("🏭 Pollutant Data:")
-                            for key, value in list(test_pollutants.items())[:6]:
-                                st.text(f"  {key}: {value}")
-                            st.text(f"  ... and {len(test_pollutants)-6} more")
-                        
-                        # Recreate the feature creation logic step by step
-                        input_data = {}
-                        
-                        # Step 1: Add pollutant data
-                        st.subheader("🔧 Step 1: Adding Pollutant Features")
-                        for key, value in test_pollutants.items():
-                            input_data[key] = value
-                        st.text(f"Added {len(test_pollutants)} pollutant features")
-                        
-                        # Step 2: Add weather data with mapping
-                        st.subheader("🔧 Step 2: Adding Weather Features")
-                        weather_feature_mapping = {
-                            'T': 'weather_temperature_2m_mean',
-                            'RH': 'weather_relative_humidity_2m_mean', 
-                            'WS': 'weather_wind_speed_10m_mean',
-                            'WD': 'weather_wind_direction_10m_dominant',
-                            'RF': 'weather_precipitation_sum',
-                            'BP': 'weather_pressure_msl_mean'
-                        }
-                        
-                        weather_mappings = []
-                        for key, value in test_weather.items():
-                            mapped_key = weather_feature_mapping.get(key, f'weather_{key}')
-                            input_data[mapped_key] = value
-                            weather_mappings.append(f"{key} → {mapped_key} = {value}")
-                        
-                        for mapping in weather_mappings:
-                            st.text(f"  {mapping}")
-                        
-                        # Step 3: Add time features
-                        st.subheader("🔧 Step 3: Adding Time Features")
-                        date_obj = pd.to_datetime('2025-09-24')
-                        input_data['year'] = date_obj.year
-                        input_data['month'] = date_obj.month
-                        input_data['day_of_year'] = date_obj.dayofyear
-                        season = ((date_obj.month%12 + 3)//3)
-                        season_map = {1: 0, 2: 1, 3: 2, 4: 3}
-                        input_data['season_encoded'] = season_map[season]
-                        
-                        time_features = ['year', 'month', 'day_of_year', 'season_encoded']
-                        for tf in time_features:
-                            st.text(f"  {tf} = {input_data[tf]}")
-                        
-                        # Step 4: Add city encoding
-                        st.subheader("🔧 Step 4: Adding City Encoding")
-                        input_data['city_encoded'] = 10  # Delhi
-                        st.text(f"  city_encoded = 10 (Delhi)")
-                        
-                        # Step 5: Create DataFrame
-                        input_df = pd.DataFrame([input_data])
-                        
-                        # Step 6: Show created features vs expected
-                        st.subheader("🔧 Step 5: Feature Matching Analysis")
-                        
-                        created_features = set(input_df.columns)
-                        expected_features = set(features)
-                        
-                        missing_features = expected_features - created_features
-                        extra_features = created_features - expected_features
-                        matching_features = created_features & expected_features
-                        
-                        match_col1, match_col2, match_col3 = st.columns(3)
-                        
-                        with match_col1:
-                            st.success(f"✅ **Matching**: {len(matching_features)}")
-                            if len(matching_features) < 10:
-                                with st.expander("See matching features"):
-                                    for feature in sorted(matching_features):
-                                        st.text(f"• {feature}")
-                        
-                        with match_col2:
-                            if missing_features:
-                                st.error(f"❌ **Missing**: {len(missing_features)}")
-                                with st.expander("See missing features"):
-                                    for feature in sorted(missing_features):
-                                        st.text(f"• {feature}")
-                            else:
-                                st.success("✅ **No Missing Features**")
-                        
-                        with match_col3:
-                            if extra_features:
-                                st.warning(f"⚠️ **Extra**: {len(extra_features)}")
-                                with st.expander("See extra features"):
-                                    for feature in sorted(extra_features):
-                                        st.text(f"• {feature}")
-                            else:
-                                st.info("ℹ️ **No Extra Features**")
-                        
-                        # Add missing features with zeros
-                        for col in features:
-                            if col not in input_df.columns:
-                                input_df[col] = 0
-                        
-                        # Final feature vector
-                        final_df = input_df[features].fillna(0)
-                        
-                        # Step 6: Show final feature statistics
-                        st.subheader("🔧 Step 6: Final Feature Vector Analysis")
-                        zero_features = (final_df.iloc[0] == 0).sum()
-                        non_zero_features = len(features) - zero_features
-                        
-                        final_col1, final_col2, final_col3 = st.columns(3)
-                        with final_col1:
-                            st.metric("📊 Total Features", len(features))
-                        with final_col2:
-                            st.metric("✅ Non-Zero Features", non_zero_features)
-                        with final_col3:
-                            st.metric("⭕ Zero Features", zero_features)
-                        
-                        if zero_features > len(features) * 0.7:
-                            st.error("🚨 **CRITICAL**: >70% features are zero - this will cause identical predictions!")
-                        elif zero_features > len(features) * 0.5:
-                            st.warning("⚠️ **WARNING**: >50% features are zero - predictions may lack variation")
-                        else:
-                            st.success("✅ **GOOD**: Most features have non-zero values")
-                        
-                        with st.expander("🎯 Final Feature Vector (Fed to Model)"):
-                            final_features_df = final_df.T.reset_index()
-                            final_features_df.columns = ['Feature', 'Value']
-                            # Highlight non-zero features
-                            final_features_df['Status'] = final_features_df['Value'].apply(lambda x: '✅ Non-Zero' if x != 0 else '⭕ Zero')
-                            st.dataframe(final_features_df, use_container_width=True)
-                        
-                        # Make prediction with debug
-                        prediction = model.predict(final_df)[0]
-                        st.success(f"🎯 **Test Prediction**: {prediction:.2f} AQI ({get_aqi_category(prediction)})")
-                        
-                    else:
-                        st.error("❌ Model not available for feature analysis")
-                        
-                        # Add missing features
-                        for col in features:
-                            if col not in input_df.columns:
-                                input_df[col] = 0
-                        
-                        # Final feature vector
-                        final_df = input_df[features].fillna(0)
-                        
-                        with st.expander("🎯 Final Feature Vector (Fed to Model)"):
-                            final_features_df = final_df.T.reset_index()
-                            final_features_df.columns = ['Feature', 'Value']
-                            st.dataframe(final_features_df, use_container_width=True)
-                        
-                        # Make prediction with debug
-                        prediction = model.predict(final_df)[0]
-                        st.success(f"🎯 **Test Prediction**: {prediction:.2f} AQI")
-                        
-                        # Check for zero-heavy features
-                        zero_features = (final_df.iloc[0] == 0).sum()
-                        st.info(f"📊 Features set to zero: {zero_features} out of {len(features)}")
-                        if zero_features > len(features) * 0.5:
-                            st.warning("⚠️ More than 50% of features are zero - this might cause identical predictions!")
-            
-            with debug_col2:
-                st.subheader("📊 Pollutant Variation Test")
-                
-                if st.button('🌡️ Test Pollutant Sensitivity'):
-                    st.subheader("🌡️ Pollutant Sensitivity Analysis")
-                    st.info("Testing how the model responds to different pollution levels using Delhi as test city")
-                    
-                    # Test with different pollutant levels
-                    test_scenarios = {
-                        'Clean Air': {'PM2.5': 15, 'PM10': 30, 'NO': 5, 'NO2': 10, 'NOx': 15, 'NH3': 3, 'CO': 0.5, 'SO2': 5, 'O3': 30, 'Benzene': 1.0, 'Toluene': 2, 'Xylene': 1},
-                        'Moderate Pollution': {'PM2.5': 60, 'PM10': 100, 'NO': 15, 'NO2': 30, 'NOx': 45, 'NH3': 10, 'CO': 1.8, 'SO2': 20, 'O3': 70, 'Benzene': 3.5, 'Toluene': 8, 'Xylene': 6},
-                        'High Pollution': {'PM2.5': 120, 'PM10': 200, 'NO': 25, 'NO2': 50, 'NOx': 75, 'NH3': 20, 'CO': 3.5, 'SO2': 40, 'O3': 120, 'Benzene': 8.0, 'Toluene': 15, 'Xylene': 12},
-                        'Severe Pollution': {'PM2.5': 200, 'PM10': 350, 'NO': 40, 'NO2': 80, 'NOx': 120, 'NH3': 35, 'CO': 6.0, 'SO2': 70, 'O3': 180, 'Benzene': 15.0, 'Toluene': 25, 'Xylene': 20},
-                        'Hazardous': {'PM2.5': 300, 'PM10': 500, 'NO': 60, 'NO2': 120, 'NOx': 180, 'NH3': 50, 'CO': 10.0, 'SO2': 100, 'O3': 250, 'Benzene': 25.0, 'Toluene': 40, 'Xylene': 30}
-                    }
-                    
-                    # Get real weather for Delhi for consistent testing
-                    try:
-                        weather_url = "https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,surface_pressure&daily=precipitation_sum&timezone=auto"
-                        weather_response = requests.get(weather_url, timeout=10)
-                        
-                        if weather_response.status_code == 200:
-                            weather_json = weather_response.json()
-                            current = weather_json.get('current', {})
-                            daily = weather_json.get('daily', {})
-                            
-                            base_weather = {
-                                'T': current.get('temperature_2m', 27),
-                                'RH': current.get('relative_humidity_2m', 65),
-                                'WS': current.get('wind_speed_10m', 6),
-                                'WD': current.get('wind_direction_10m', 180),
-                                'RF': daily.get('precipitation_sum', [0])[0] if daily.get('precipitation_sum') else 0,
-                                'BP': current.get('surface_pressure', 1013)
-                            }
-                            st.success(f"✅ Using real Delhi weather: {base_weather['T']}°C, {base_weather['RH']}% humidity")
-                        else:
-                            base_weather = {'T': 27, 'RH': 65, 'WS': 6, 'WD': 180, 'RF': 0, 'BP': 1013}
-                            st.warning("⚠️ Using default weather data")
-                    except Exception as e:
-                        base_weather = {'T': 27, 'RH': 65, 'WS': 6, 'WD': 180, 'RF': 0, 'BP': 1013}
-                        st.warning(f"⚠️ Using default weather data (Error: {str(e)})")
-                    
-                    sensitivity_results = []
-                    
-                    for scenario_name, pollutants in test_scenarios.items():
-                        with st.spinner(f'Testing {scenario_name}...'):
-                            pred = make_realtime_prediction(pollutants, base_weather, 'Delhi', '2025-09-24')
-                            if pred is not None:
-                                sensitivity_results.append({
-                                    'Scenario': scenario_name,
-                                    'PM2.5': pollutants['PM2.5'],
-                                    'PM10': pollutants['PM10'],
-                                    'NO2': pollutants['NO2'],
-                                    'SO2': pollutants['SO2'],
-                                    'Predicted_AQI': round(pred, 1),
-                                    'Category': get_aqi_category(pred),
-                                    'Expected_Range': {
-                                        'Clean Air': '0-50', 'Moderate Pollution': '51-100', 
-                                        'High Pollution': '101-200', 'Severe Pollution': '201-300',
-                                        'Hazardous': '301+'
-                                    }[scenario_name]
-                                })
-                    
-                    if sensitivity_results:
-                        sens_df = pd.DataFrame(sensitivity_results)
-                        st.dataframe(sens_df, use_container_width=True)
-                        
-                        # Analysis
-                        aqi_values = [r['Predicted_AQI'] for r in sensitivity_results]
-                        aqi_range = max(aqi_values) - min(aqi_values)
-                        
-                        sens_col1, sens_col2, sens_col3 = st.columns(3)
-                        with sens_col1:
-                            st.metric('📈 AQI Range', f"{aqi_range:.1f}")
-                        with sens_col2:
-                            st.metric('📊 Min AQI', f"{min(aqi_values):.1f}")
-                        with sens_col3:
-                            st.metric('📈 Max AQI', f"{max(aqi_values):.1f}")
-                        
-                        # Sensitivity assessment
-                        if aqi_range < 10:
-                            st.error("🚨 **VERY LOW SENSITIVITY**: Model shows almost no response to massive pollutant changes!")
-                            st.info("Expected: Clean air (~25 AQI) to Hazardous (~400+ AQI) should show 300+ point difference")
-                        elif aqi_range < 50:
-                            st.warning("⚠️ **LOW SENSITIVITY**: Model shows limited response to pollutant changes")
-                            st.info("The model should show much larger AQI differences between clean and hazardous air")
-                        elif aqi_range < 100:
-                            st.info("ℹ️ **MODERATE SENSITIVITY**: Model shows some response to pollutant changes")
-                        else:
-                            st.success("✅ **GOOD SENSITIVITY**: Model responds well to pollutant changes")
-                        
-                        # Check if predictions match expected ranges
-                        st.subheader("📊 Expected vs Actual Analysis")
-                        range_matches = 0
-                        for result in sensitivity_results:
-                            expected = result['Expected_Range']
-                            actual = result['Predicted_AQI']
-                            
-                            if expected == '0-50' and actual <= 50:
-                                range_matches += 1
-                            elif expected == '51-100' and 51 <= actual <= 100:
-                                range_matches += 1
-                            elif expected == '101-200' and 101 <= actual <= 200:
-                                range_matches += 1
-                            elif expected == '201-300' and 201 <= actual <= 300:
-                                range_matches += 1
-                            elif expected == '301+' and actual > 300:
-                                range_matches += 1
-                        
-                        match_percentage = (range_matches / len(sensitivity_results)) * 100
-                        
-                        if match_percentage >= 80:
-                            st.success(f"✅ **EXCELLENT**: {match_percentage:.0f}% of predictions match expected ranges")
-                        elif match_percentage >= 60:
-                            st.info(f"ℹ️ **GOOD**: {match_percentage:.0f}% of predictions match expected ranges")
-                        elif match_percentage >= 40:
-                            st.warning(f"⚠️ **MODERATE**: {match_percentage:.0f}% of predictions match expected ranges")
-                        else:
-                            st.error(f"🚨 **POOR**: Only {match_percentage:.0f}% of predictions match expected ranges")
-                    
-                    else:
-                        st.error("❌ No predictions could be made for sensitivity analysis")
-                
-                st.subheader("🌦️ Weather Impact Test")
-                
-                if st.button('☀️ Test Weather Sensitivity'):
-                    st.subheader("☀️ Weather Sensitivity Analysis")
-                    
-                    # Test with different weather conditions
-                    weather_scenarios = {
-                        'Hot & Dry': {'T': 35, 'RH': 30, 'WS': 3, 'WD': 180, 'RF': 0, 'BP': 1010},
-                        'Cool & Humid': {'T': 20, 'RH': 85, 'WS': 8, 'WD': 200, 'RF': 5, 'BP': 1020},
-                        'Rainy': {'T': 25, 'RH': 90, 'WS': 12, 'WD': 220, 'RF': 15, 'BP': 1005},
-                        'Windy': {'T': 28, 'RH': 50, 'WS': 20, 'WD': 270, 'RF': 0, 'BP': 1015}
-                    }
-                    
-                    base_pollutants = {'PM2.5': 80, 'PM10': 120, 'NO': 18, 'NO2': 35, 'NOx': 50, 'NH3': 12, 'CO': 2.0, 'SO2': 22, 'O3': 75, 'Benzene': 4.0, 'Toluene': 9, 'Xylene': 7}
-                    
-                    weather_results = []
-                    
-                    for scenario_name, weather in weather_scenarios.items():
-                        pred = make_realtime_prediction(base_pollutants, weather, 'Delhi', '2025-09-24')
-                        if pred is not None:
-                            weather_results.append({
-                                'Scenario': scenario_name,
-                                'Temperature': weather['T'],
-                                'Humidity': weather['RH'],
-                                'Wind_Speed': weather['WS'],
-                                'Predicted_AQI': round(pred, 1),
-                                'Category': get_aqi_category(pred)
-                            })
-                    
-                    if weather_results:
-                        weather_df = pd.DataFrame(weather_results)
-                        st.dataframe(weather_df, use_container_width=True)
-                        
-                        # Check weather sensitivity
-                        weather_aqi_range = max(weather_df['Predicted_AQI']) - min(weather_df['Predicted_AQI'])
-                        st.metric('🌦️ Weather Impact Range', f"{weather_aqi_range:.1f}")
-                        
-                        if weather_aqi_range < 5:
-                            st.warning("⚠️ Weather has minimal impact on predictions")
-                        else:
-                            st.success(f"✅ Weather shows {weather_aqi_range:.1f} point AQI variation")
-                
-                # Raw model info
-                st.subheader("🔍 Model Information")
-                model, features, available = load_weather_aqi_model()
-                if available:
-                    st.info(f"📋 Model Type: {type(model).__name__}")
-                    st.info(f"🔢 Features Required: {len(features)}")
-                    st.info(f"🎯 Model Available: {available}")
-                else:
-                    st.error("❌ Model not available")
-                    
-        else:
-            st.error("❌ Model not available - cannot run debug tests")
-            st.info("Please ensure the weather-enhanced model is loaded correctly")
 
 if __name__ == '__main__':
     main()

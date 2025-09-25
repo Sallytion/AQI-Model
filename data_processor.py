@@ -272,10 +272,21 @@ class AQIWeatherPredictor:
         # Create input data
         input_data = {}
         
-        # Add pollutant data
-        pollutant_cols = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 'O3', 'Benzene', 'Toluene', 'Xylene']
-        for col in pollutant_cols:
-            input_data[col] = pollutants.get(col, 0)
+        # Universal default values for missing or zero pollutant data
+        pollutant_defaults = {
+            'PM2.5': 50.0, 'PM10': 80.0, 'NO': 20.0, 'NO2': 40.0, 
+            'NOx': 60.0, 'NH3': 25.0, 'CO': 1.5, 'SO2': 30.0, 
+            'O3': 80.0, 'Benzene': 2.0, 'Toluene': 5.0, 'Xylene': 3.0
+        }
+        
+        # Add pollutant data with defaults for missing or zero values
+        for col in pollutant_defaults.keys():
+            value = pollutants.get(col, 0)
+            # Use default if value is missing, 0, or invalid
+            if value is None or value <= 0:
+                input_data[col] = pollutant_defaults[col]
+            else:
+                input_data[col] = value
         
         # Add weather data
         for key, value in weather_data.items():

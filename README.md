@@ -2,7 +2,7 @@
 
 A real-time Air Quality Index (AQI) monitoring and prediction dashboard for Indian cities, powered by machine learning and live government data.
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url-here.streamlit.app)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://fds-aqi.streamlit.app/)
 
 ## 🌟 Live Demo Features
 

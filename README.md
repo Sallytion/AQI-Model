@@ -1,4 +1,4 @@
-# 🇮🇳 India AQI Dashboard & Prediction System
+# India AQI Dashboard & Prediction System
 
 A real-time Air Quality Index (AQI) monitoring and prediction dashboard for Indian cities, powered by machine learning and live government data.
 
